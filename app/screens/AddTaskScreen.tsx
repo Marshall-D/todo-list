@@ -1,142 +1,189 @@
-// src/screens/AddTaskScreen.tsx
-import React, { useState } from "react";
+"use client";
+// app/screens/AddTaskScreen.tsx
+import { useEffect, useState, useRef } from "react";
 import {
-  SafeAreaView,
   View,
   Text,
   TextInput,
-  TouchableOpacity,
-  Keyboard,
-  Alert,
-  Platform,
+  Pressable,
   KeyboardAvoidingView,
-  ScrollView,
+  Platform,
+  Alert,
+  Animated,
 } from "react-native";
-import { useTasks } from "../hooks/useTasks";
-import { MaterialIcons } from "@expo/vector-icons";
-import { AddTaskProps } from "../types/types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { MaterialIcons, Feather } from "@expo/vector-icons";
+import { RootStackParamList, Task } from "../../App";
+// import type { Task, RootStackParamList } from "@/index"
 
-export default function AddTaskScreen({ navigation }: AddTaskProps) {
-  const { addTask } = useTasks();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
-  const onSave = () => {
-    const trimmed = title.trim();
-    if (!trimmed) {
-      Alert.alert("Validation", "Task title cannot be empty.");
+export function AddTaskScreen({ navigation, route }: Props) {
+  const taskToEdit = route.params?.taskToEdit;
+  const [title, setTitle] = useState(taskToEdit?.title || "");
+  const [description, setDescription] = useState(taskToEdit?.description || "");
+  const [loading, setLoading] = useState(false);
+  const fadeValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeValue, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    navigation.setOptions({
+      headerTitle: taskToEdit ? "Edit Task" : "Add Task",
+    });
+  }, [taskToEdit, navigation, fadeValue]);
+
+  const handleSaveTask = async () => {
+    if (title.trim().length === 0) {
+      Alert.alert("Required Field", "Please enter a task title");
       return;
     }
-    addTask(trimmed, description.trim());
-    Keyboard.dismiss();
-    navigation.goBack();
+
+    setLoading(true);
+    try {
+      const stored = await AsyncStorage.getItem("tasks");
+      let tasks: Task[] = stored ? JSON.parse(stored) : [];
+
+      if (taskToEdit) {
+        tasks = tasks.map((t) =>
+          t.id === taskToEdit.id
+            ? {
+                ...t,
+                title: title.trim(),
+                description: description.trim() || undefined,
+              }
+            : t
+        );
+      } else {
+        const newTask: Task = {
+          id: Date.now().toString(),
+          title: title.trim(),
+          description: description.trim() || undefined,
+          completed: false,
+          createdAt: Date.now(),
+        };
+        tasks.unshift(newTask);
+      }
+
+      await AsyncStorage.setItem("tasks", JSON.stringify(tasks));
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert("Error", "Failed to save task");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-primaryLight">
-      {/* Header: back button top-left + centered title */}
-      <View className="relative h-20 px-6">
-        {/* Back button pinned to top-left */}
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="absolute left-4 top-4 w-11 h-11 items-center justify-center rounded-lg bg-white shadow-sm"
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          activeOpacity={0.8}
-        >
-          <MaterialIcons
-            name="arrow-back-ios"
-            size={18}
-            className="text-brand-primary"
-          />
-        </TouchableOpacity>
-
-        {/* Centered title */}
-        <View className="absolute left-0 right-0 top-4 items-center">
-          <Text className="text-lg text-brand-primary font-JakartaExtraBold">
-            Add Task
-          </Text>
-        </View>
-      </View>
-
-      {/* Form area (centred) */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      className="flex-1 bg-brand-white"
+    >
+      <Animated.ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        className="p-4"
+        style={{ opacity: fadeValue }}
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            padding: 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View className="bg-white rounded-3xl p-6 shadow-md border border-brand-grayBlue">
-            {/* Title field */}
-            <Text className="text-sm text-brand-textGray mb-2">Title</Text>
-            <TextInput
-              placeholder="e.g., Buy groceries"
-              placeholderTextColor="#94A3B8"
-              value={title}
-              onChangeText={setTitle}
-              className="text-base text-brand-textDark font-JakartaMedium p-3 bg-brand-primaryLight rounded-lg mb-4"
-              accessibilityLabel="Task title input"
-              returnKeyType="next"
-              onSubmitEditing={() => {
-                // move focus to description if you add refs later
-              }}
-            />
-
-            {/* Description field */}
-            <Text className="text-sm text-brand-textGray mb-2">
-              Description (optional)
+        <View className="flex-1">
+          {/* Title Section */}
+          <View className="mb-8 mt-4">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+              Task Title
             </Text>
-            <TextInput
-              placeholder="Add notes, context or subtasks"
-              placeholderTextColor="#94A3B8"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              className="text-sm text-brand-textGray3 font-JakartaLight p-3 bg-brand-primaryLight rounded-lg min-h-[110px]"
-              accessibilityLabel="Task description input"
-              textAlignVertical="top"
-            />
-
-            {/* Actions */}
-            <View className="flex-row justify-between items-center mt-6">
-              <TouchableOpacity
-                onPress={() => {
-                  setTitle("");
-                  setDescription("");
-                }}
-                className="px-4 py-3 rounded-lg items-center justify-center bg-brand-primaryLight"
-                accessibilityRole="button"
-                accessibilityLabel="Clear fields"
-              >
-                <Text className="text-sm text-brand-primary">Clear</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={onSave}
-                className="px-5 py-3 rounded-lg items-center justify-center bg-brand-primary shadow"
-                accessibilityRole="button"
-                accessibilityLabel="Save task"
-                activeOpacity={0.9}
-              >
-                <Text className="text-sm text-white font-JakartaMedium">
-                  Add Task
-                </Text>
-              </TouchableOpacity>
+            <View className="flex-row items-center border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white">
+              <MaterialIcons
+                name="edit-note"
+                size={20}
+                color="#0056B3"
+                style={{ marginRight: 12 }}
+              />
+              <TextInput
+                placeholder="What needs to be done?"
+                placeholderTextColor="#94A3B8"
+                value={title}
+                onChangeText={setTitle}
+                maxLength={100}
+                className="flex-1 text-base text-brand-textDark"
+              />
             </View>
+            <Text className="text-xs text-brand-placeholder mt-2">
+              {title.length}/100
+            </Text>
           </View>
 
-          {/* Extra spacing so form feels centered on taller screens */}
-          <View style={{ height: 24 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          {/* Description Section */}
+          <View className="mb-8">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+              Description (Optional)
+            </Text>
+            <View className="border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white">
+              <TextInput
+                placeholder="Add more details about your task..."
+                placeholderTextColor="#94A3B8"
+                value={description}
+                onChangeText={setDescription}
+                maxLength={500}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+                className="text-base text-brand-textDark"
+              />
+            </View>
+            <Text className="text-xs text-brand-placeholder mt-2">
+              {description.length}/500
+            </Text>
+          </View>
+
+          {/* Info Box */}
+          <View className="bg-brand-primaryLight/10 rounded-xl p-4 mb-8 flex-row items-start">
+            <Feather
+              name="info"
+              size={18}
+              color="#0056B3"
+              style={{ marginRight: 12 }}
+            />
+            <Text className="text-sm text-brand-textDark flex-1">
+              Tasks are saved automatically to your device. You can access them
+              anytime without internet.
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View className="flex-row gap-3 my-16">
+          <Pressable
+            onPress={() => navigation.goBack()}
+            className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white"
+          >
+            <Text className="font-JakartaSemiBold text-center text-brand-textDark">
+              Cancel
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSaveTask}
+            disabled={loading}
+            className={`flex-1 py-3 rounded-xl flex-row justify-center items-center gap-2 ${
+              loading ? "bg-brand-primaryLight" : "bg-brand-primary"
+            }`}
+          >
+            <MaterialIcons
+              name={taskToEdit ? "check-circle" : "add-circle"}
+              size={20}
+              color="white"
+            />
+            <Text className="font-JakartaSemiBold text-center text-brand-white">
+              {taskToEdit ? "Save Changes" : "Add Task"}
+            </Text>
+          </Pressable>
+        </View>
+      </Animated.ScrollView>
+    </KeyboardAvoidingView>
   );
 }
