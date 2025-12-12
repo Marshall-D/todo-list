@@ -1,6 +1,6 @@
-"use client";
 // app/screens/AddTaskScreen.tsx
-import { useEffect, useState, useRef } from "react";
+"use client";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,11 +11,10 @@ import {
   Alert,
   Animated,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
-import { RootStackParamList, Task } from "../../App";
-// import type { Task, RootStackParamList } from "@/index"
+import type { RootStackParamList, Task } from "../../App";
+import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
@@ -38,7 +37,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
     });
   }, [taskToEdit, navigation, fadeValue]);
 
-  const handleSaveTask = async () => {
+  const handleSaveTask = useCallback(async () => {
     if (title.trim().length === 0) {
       Alert.alert("Required Field", "Please enter a task title");
       return;
@@ -46,8 +45,8 @@ export function AddTaskScreen({ navigation, route }: Props) {
 
     setLoading(true);
     try {
-      const stored = await AsyncStorage.getItem("tasks");
-      let tasks: Task[] = stored ? JSON.parse(stored) : [];
+      const stored = await getStoredTasks();
+      let tasks: Task[] = stored ? stored : [];
 
       if (taskToEdit) {
         tasks = tasks.map((t) =>
@@ -70,7 +69,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
         tasks.unshift(newTask);
       }
 
-      await AsyncStorage.setItem("tasks", JSON.stringify(tasks));
+      await saveTasks(tasks);
       navigation.goBack();
     } catch (error) {
       Alert.alert("Error", "Failed to save task");
@@ -78,8 +77,48 @@ export function AddTaskScreen({ navigation, route }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [title, description, taskToEdit, navigation]);
 
+  return (
+    <AddTaskView
+      title={title}
+      description={description}
+      setTitle={setTitle}
+      setDescription={setDescription}
+      onCancel={() => navigation.goBack()}
+      onSave={handleSaveTask}
+      loading={loading}
+      fadeValue={fadeValue}
+      taskToEdit={taskToEdit}
+    />
+  );
+}
+
+/* ---------- Presentational view (pure UI) ---------- */
+
+type AddTaskViewProps = {
+  title: string;
+  description: string;
+  setTitle: (v: string) => void;
+  setDescription: (v: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  loading: boolean;
+  fadeValue: Animated.Value;
+  taskToEdit?: Task;
+};
+
+function AddTaskView({
+  title,
+  description,
+  setTitle,
+  setDescription,
+  onCancel,
+  onSave,
+  loading,
+  fadeValue,
+  taskToEdit,
+}: AddTaskViewProps) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -159,7 +198,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
         {/* Action Buttons */}
         <View className="flex-row gap-3 my-16">
           <Pressable
-            onPress={() => navigation.goBack()}
+            onPress={onCancel}
             className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white"
           >
             <Text className="font-JakartaSemiBold text-center text-brand-textDark">
@@ -167,7 +206,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
             </Text>
           </Pressable>
           <Pressable
-            onPress={handleSaveTask}
+            onPress={onSave}
             disabled={loading}
             className={`flex-1 py-3 rounded-xl flex-row justify-center items-center gap-2 ${
               loading ? "bg-brand-primaryLight" : "bg-brand-primary"

@@ -1,7 +1,6 @@
-"use client";
 // app/screens/TaskListScreen.tsx
-
-import { useState, useCallback, useRef } from "react";
+"use client";
+import React, { useCallback } from "react";
 import {
   View,
   Text,
@@ -9,34 +8,32 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
-  Alert,
-  Animated,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
-import { RootStackParamList, Task } from "../../App";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { RootStackParamList, Task } from "../../App";
+import { useTasks } from "../hooks/useTasks";
+import { TaskItem } from "../components/TaskItem";
+import { useFocusEffect } from "@react-navigation/native";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TaskList">;
 
 export function TaskListScreen({ navigation }: Props) {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
-
-  const loadTasks = useCallback(async () => {
-    try {
-      const stored = await AsyncStorage.getItem("tasks");
-      const parsed = stored ? JSON.parse(stored) : [];
-      setTasks(parsed.sort((a: Task, b: Task) => b.createdAt - a.createdAt));
-    } catch (error) {
-      console.error("Error loading tasks:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // container: uses hook & passes props to the presentational view below
+  const {
+    loading,
+    refreshing,
+    filter,
+    setFilter,
+    loadTasks,
+    onRefresh,
+    filteredTasks,
+    completedCount,
+    activeCount,
+    deleteTask,
+    toggleComplete,
+    tasks,
+  } = useTasks();
 
   useFocusEffect(
     useCallback(() => {
@@ -44,34 +41,64 @@ export function TaskListScreen({ navigation }: Props) {
     }, [loadTasks])
   );
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadTasks().then(() => setRefreshing(false));
-  }, [loadTasks]);
-
-  const deleteTask = async (id: string) => {
-    const updated = tasks.filter((t) => t.id !== id);
-    setTasks(updated);
-    await AsyncStorage.setItem("tasks", JSON.stringify(updated));
+  const handleEdit = (task: Task) => {
+    navigation.navigate("AddTask", { taskToEdit: task });
   };
 
-  const toggleComplete = async (id: string) => {
-    const updated = tasks.map((t) =>
-      t.id === id ? { ...t, completed: !t.completed } : t
-    );
-    setTasks(updated);
-    await AsyncStorage.setItem("tasks", JSON.stringify(updated));
-  };
+  const handleAdd = () => navigation.navigate("AddTask");
 
-  const filteredTasks = tasks.filter((task) => {
-    if (filter === "active") return !task.completed;
-    if (filter === "completed") return task.completed;
-    return true;
-  });
+  return (
+    <TaskListView
+      loading={loading}
+      tasks={tasks}
+      filteredTasks={filteredTasks}
+      refreshing={refreshing}
+      filter={filter}
+      setFilter={setFilter}
+      onRefresh={onRefresh}
+      onToggle={toggleComplete}
+      onDelete={deleteTask}
+      onEdit={handleEdit}
+      onAdd={handleAdd}
+      completedCount={completedCount}
+      activeCount={activeCount}
+    />
+  );
+}
 
-  const completedCount = tasks.filter((t) => t.completed).length;
-  const activeCount = tasks.filter((t) => !t.completed).length;
+/* ---------- Presentational view (pure UI) ---------- */
 
+type TaskListViewProps = {
+  loading: boolean;
+  tasks: Task[];
+  filteredTasks: Task[];
+  refreshing: boolean;
+  filter: "all" | "active" | "completed";
+  setFilter: (f: "all" | "active" | "completed") => void;
+  onRefresh: () => void;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (task: Task) => void;
+  onAdd: () => void;
+  completedCount: number;
+  activeCount: number;
+};
+
+function TaskListView({
+  loading,
+  tasks,
+  filteredTasks,
+  refreshing,
+  filter,
+  setFilter,
+  onRefresh,
+  onToggle,
+  onDelete,
+  onEdit,
+  onAdd,
+  completedCount,
+  activeCount,
+}: TaskListViewProps) {
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-brand-white">
@@ -161,11 +188,9 @@ export function TaskListScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <TaskItem
               task={item}
-              onDelete={deleteTask}
-              onToggle={toggleComplete}
-              onEdit={() =>
-                navigation.navigate("AddTask", { taskToEdit: item })
-              }
+              onDelete={onDelete}
+              onToggle={onToggle}
+              onEdit={() => onEdit(item)}
             />
           )}
           refreshControl={
@@ -181,7 +206,7 @@ export function TaskListScreen({ navigation }: Props) {
 
       {/* Floating Action Button */}
       <Pressable
-        onPress={() => navigation.navigate("AddTask")}
+        onPress={onAdd}
         className="absolute bottom-32 right-6 w-20 h-20 bg-brand-primary rounded-full justify-center items-center"
         style={{
           shadowColor: "#0056B3",
@@ -194,118 +219,5 @@ export function TaskListScreen({ navigation }: Props) {
         <MaterialIcons name="add" size={28} color="white" />
       </Pressable>
     </View>
-  );
-}
-
-interface TaskItemProps {
-  task: Task;
-  onDelete: (id: string) => void;
-  onToggle: (id: string) => void;
-  onEdit: () => void;
-}
-function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
-  const scaleValue = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleValue, {
-      toValue: 0.98,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const confirmDelete = () => {
-    Alert.alert("Delete Task", "Are you sure you want to delete this task?", [
-      { text: "Cancel", onPress: () => {} },
-      {
-        text: "Delete",
-        onPress: () => onDelete(task.id),
-        style: "destructive",
-      },
-    ]);
-  };
-
-  return (
-    <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        // <-- wrap onToggle so it receives the task id (not the event)
-        onPress={() => onToggle(task.id)}
-        className={`mb-3 rounded-xl p-4 border-l-4 flex-row items-center justify-between ${
-          task.completed
-            ? "bg-brand-successLight border-brand-success"
-            : "bg-brand-grayBlue border-brand-primary"
-        }`}
-        style={{
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.05,
-          shadowRadius: 3,
-          elevation: 2,
-        }}
-      >
-        <View className="flex-1 flex-row items-center">
-          <Animated.View
-            className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
-              task.completed
-                ? "bg-brand-success border-brand-success"
-                : "border-brand-primary"
-            }`}
-          >
-            {task.completed && (
-              <MaterialIcons name="check" size={14} color="white" />
-            )}
-          </Animated.View>
-          <View className="flex-1">
-            <Text
-              className={`font-JakartaSemiBold text-base ${
-                task.completed
-                  ? "line-through text-brand-placeholder"
-                  : "text-brand-textDark"
-              }`}
-              numberOfLines={2}
-            >
-              {task.title}
-            </Text>
-            {task.description && (
-              <Text
-                className={`font-Jakarta text-sm mt-1 ${
-                  task.completed
-                    ? "text-brand-placeholder"
-                    : "text-brand-textGray"
-                }`}
-                numberOfLines={1}
-              >
-                {task.description}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        <View className="flex-row items-center gap-2 ml-3">
-          <Pressable
-            onPress={onEdit}
-            className="p-2 rounded-lg"
-            style={{ opacity: 0.7 }}
-          >
-            <Feather name="edit-2" size={18} color="#0056B3" />
-          </Pressable>
-          <Pressable
-            onPress={confirmDelete}
-            className="p-2 rounded-lg"
-            style={{ opacity: 0.7 }}
-          >
-            <Feather name="trash-2" size={18} color="#E11D48" />
-          </Pressable>
-        </View>
-      </Pressable>
-    </Animated.View>
   );
 }

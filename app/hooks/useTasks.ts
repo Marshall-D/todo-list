@@ -1,69 +1,98 @@
-import { useCallback, useEffect, useState } from "react";
-import { loadTasks, saveTasks } from "../utils/storage";
-import { Task } from "../types/types";
+// app/hooks/useTasks.ts
+import { useCallback, useMemo, useState } from "react";
+import type { Task } from "../../App";
+import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 
-/**
- * useTasks - central hook for managing task state.
- * Exposes pure functions so logic is easy to unit-test.
- */
+export type FilterMode = "all" | "active" | "completed";
+
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<FilterMode>("all");
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const t = await loadTasks();
-      if (!mounted) return;
-      // sort by createdAt desc (newest first)
-      t.sort((a, b) => b.createdAt - a.createdAt);
-      setTasks(t);
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const parsed = await getStoredTasks();
+      // keep same ordering as original
+      setTasks(parsed.sort((a: Task, b: Task) => b.createdAt - a.createdAt));
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    } finally {
       setLoading(false);
-    })();
-    return () => {
-      mounted = false;
-    };
+    }
   }, []);
 
-  // persist every time tasks change
-  useEffect(() => {
-    // avoid saving on initial load
-    if (loading) return;
-    saveTasks(tasks);
-  }, [tasks, loading]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    return loadTasks().then(() => setRefreshing(false));
+  }, [loadTasks]);
 
-  const addTask = useCallback((title: string, description?: string) => {
-    const t: Task = {
-      id: `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-      title: title.trim(),
-      description: description?.trim(),
-      completed: false,
-      createdAt: Date.now(),
-    };
-    setTasks((prev) => [t, ...prev]);
-    return t;
-  }, []);
+  const deleteTask = useCallback(
+    async (id: string) => {
+      const updated = tasks.filter((t) => t.id !== id);
+      setTasks(updated);
+      await saveTasks(updated);
+    },
+    [tasks]
+  );
 
-  const toggleTask = useCallback((id: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
-  }, []);
+  const toggleComplete = useCallback(
+    async (id: string) => {
+      const updated = tasks.map((t) =>
+        t.id === id ? { ...t, completed: !t.completed } : t
+      );
+      setTasks(updated);
+      await saveTasks(updated);
+    },
+    [tasks]
+  );
 
-  const deleteTask = useCallback((id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const addOrUpdateTask = useCallback(
+    async (task: Task) => {
+      // if exists, update; otherwise add to front
+      const exists = tasks.some((t) => t.id === task.id);
+      let updated: Task[];
+      if (exists) {
+        updated = tasks.map((t) => (t.id === task.id ? task : t));
+      } else {
+        updated = [task, ...tasks];
+      }
+      setTasks(updated);
+      await saveTasks(updated);
+    },
+    [tasks]
+  );
 
-  const clearAll = useCallback(() => {
-    setTasks([]);
-  }, []);
+  const filteredTasks = useMemo(() => {
+    if (filter === "active") return tasks.filter((t) => !t.completed);
+    if (filter === "completed") return tasks.filter((t) => t.completed);
+    return tasks;
+  }, [tasks, filter]);
+
+  const completedCount = useMemo(
+    () => tasks.filter((t) => t.completed).length,
+    [tasks]
+  );
+  const activeCount = useMemo(
+    () => tasks.filter((t) => !t.completed).length,
+    [tasks]
+  );
 
   return {
     tasks,
     loading,
-    addTask,
-    toggleTask,
+    refreshing,
+    filter,
+    setFilter,
+    loadTasks,
+    onRefresh,
     deleteTask,
-    clearAll,
+    toggleComplete,
+    addOrUpdateTask,
+    filteredTasks,
+    completedCount,
+    activeCount,
   };
 }

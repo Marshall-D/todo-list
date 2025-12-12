@@ -27,8 +27,6 @@ export default function RootLayout() {
           headerShown: true,
           headerStyle: {
             backgroundColor: "#FFFFFF",
-            borderBottomWidth: 1,
-            borderBottomColor: "#E2E8F0",
           },
           headerTintColor: "#0056B3",
           headerTitleStyle: {
@@ -36,7 +34,7 @@ export default function RootLayout() {
             fontSize: 18,
             color: "#334155",
           },
-          cardStyle: {
+          contentStyle: {
             backgroundColor: "#FFFFFF",
           },
         }}
