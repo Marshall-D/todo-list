@@ -8,13 +8,13 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Animated,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { RootStackParamList, Task } from "../../App";
 import { getStoredTasks, saveTasks } from "../utils/taskStorage";
+import AppModal from "../components/AppModal";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
@@ -24,6 +24,16 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const [description, setDescription] = useState(taskToEdit?.description || "");
   const [loading, setLoading] = useState(false);
   const fadeValue = useRef(new Animated.Value(0)).current;
+
+  // modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<"success" | "error" | "info">(
+    "info"
+  );
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalMessage, setModalMessage] = useState<string | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     Animated.timing(fadeValue, {
@@ -37,9 +47,21 @@ export function AddTaskScreen({ navigation, route }: Props) {
     });
   }, [taskToEdit, navigation, fadeValue]);
 
+  const showModal = (
+    type: "success" | "error" | "info",
+    title?: string,
+    msg?: string
+  ) => {
+    setModalType(type);
+    setModalTitle(title);
+    setModalMessage(msg);
+    setModalVisible(true);
+  };
+
   const handleSaveTask = useCallback(async () => {
     if (title.trim().length === 0) {
-      Alert.alert("Required Field", "Please enter a task title");
+      // replaced Alert.alert
+      showModal("error", "Required Field", "Please enter a task title");
       return;
     }
 
@@ -72,53 +94,14 @@ export function AddTaskScreen({ navigation, route }: Props) {
       await saveTasks(tasks);
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Error", "Failed to save task");
+      // replaced Alert.alert
+      showModal("error", "Error", "Failed to save task");
       console.error(error);
     } finally {
       setLoading(false);
     }
   }, [title, description, taskToEdit, navigation]);
 
-  return (
-    <AddTaskView
-      title={title}
-      description={description}
-      setTitle={setTitle}
-      setDescription={setDescription}
-      onCancel={() => navigation.goBack()}
-      onSave={handleSaveTask}
-      loading={loading}
-      fadeValue={fadeValue}
-      taskToEdit={taskToEdit}
-    />
-  );
-}
-
-/* ---------- Presentational view (pure UI) ---------- */
-
-type AddTaskViewProps = {
-  title: string;
-  description: string;
-  setTitle: (v: string) => void;
-  setDescription: (v: string) => void;
-  onCancel: () => void;
-  onSave: () => void;
-  loading: boolean;
-  fadeValue: Animated.Value;
-  taskToEdit?: Task;
-};
-
-function AddTaskView({
-  title,
-  description,
-  setTitle,
-  setDescription,
-  onCancel,
-  onSave,
-  loading,
-  fadeValue,
-  taskToEdit,
-}: AddTaskViewProps) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -198,7 +181,7 @@ function AddTaskView({
         {/* Action Buttons */}
         <View className="flex-row gap-3 my-16">
           <Pressable
-            onPress={onCancel}
+            onPress={() => navigation.goBack()}
             className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white"
           >
             <Text className="font-JakartaSemiBold text-center text-brand-textDark">
@@ -206,7 +189,7 @@ function AddTaskView({
             </Text>
           </Pressable>
           <Pressable
-            onPress={onSave}
+            onPress={handleSaveTask}
             disabled={loading}
             className={`flex-1 py-3 rounded-xl flex-row justify-center items-center gap-2 ${
               loading ? "bg-brand-primaryLight" : "bg-brand-primary"
@@ -223,6 +206,15 @@ function AddTaskView({
           </Pressable>
         </View>
       </Animated.ScrollView>
+
+      <AppModal
+        visible={modalVisible}
+        type={modalType}
+        title={modalTitle}
+        message={modalMessage}
+        onClose={() => setModalVisible(false)}
+        continueLabel="OK"
+      />
     </KeyboardAvoidingView>
   );
 }
