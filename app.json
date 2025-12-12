@@ -12,15 +12,22 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "plugins": ["expo-speech-recognition"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dave840.todolist"
+      "bundleIdentifier": "com.dave840.todolist",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice for task entry.",
+        "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe tasks from your voice."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/todoicon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": ["RECORD_AUDIO"],
+
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.dave840.todolist"
