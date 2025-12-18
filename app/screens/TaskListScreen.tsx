@@ -1,6 +1,6 @@
 // app/screens/TaskListScreen.tsx
 "use client";
-import React, { useCallback } from "react";
+import React, { useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Modal,
   Animated,
   ScrollView,
+  TextInput,
 } from "react-native";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -25,22 +26,25 @@ type Props = NativeStackScreenProps<RootStackParamList, "TaskList">;
 
 export function TaskListScreen({ navigation }: Props) {
   const {
+    tasks,
     loading,
     refreshing,
     filter,
     setFilter,
+    sortMode,
+    setSortMode,
+    searchQuery,
+    setSearchQuery,
     loadTasks,
     onRefresh,
+    deleteTask,
+    toggleComplete,
     filteredTasks,
     completedCount,
     activeCount,
-    deleteTask,
-    toggleComplete,
-    tasks,
-    sortMode,
-    setSortMode,
   } = useTasks();
 
+  // voice hook (handles speech, batch add, etc.)
   const voice = useVoice(onRefresh);
 
   useFocusEffect(
@@ -73,6 +77,8 @@ export function TaskListScreen({ navigation }: Props) {
       voice={voice}
       sortMode={sortMode}
       setSortMode={setSortMode}
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
     />
   );
 }
@@ -96,6 +102,8 @@ type TaskListViewProps = {
   voice: ReturnType<typeof useVoice>;
   sortMode: SortMode;
   setSortMode: (m: SortMode) => void;
+  searchQuery: string;
+  setSearchQuery: (s: string) => void;
 };
 
 function TaskListView({
@@ -115,12 +123,15 @@ function TaskListView({
   voice,
   sortMode,
   setSortMode,
+  searchQuery,
+  setSearchQuery,
 }: TaskListViewProps) {
-  // local animated values for presentation
-  const fabFadeValue = new Animated.Value(0);
-  const voiceFadeValue = new Animated.Value(0);
+  // animated values kept in refs
+  const fabFadeValue = useRef(new Animated.Value(0)).current;
+  const voiceFadeValue = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
+  // animate FAB modal
+  useEffect(() => {
     if (voice.fabOptionsVisible) {
       Animated.timing(fabFadeValue, {
         toValue: 1,
@@ -130,9 +141,10 @@ function TaskListView({
     } else {
       fabFadeValue.setValue(0);
     }
-  }, [voice.fabOptionsVisible]);
+  }, [voice.fabOptionsVisible, fabFadeValue]);
 
-  React.useEffect(() => {
+  // animate voice modal
+  useEffect(() => {
     if (voice.voiceModalVisible) {
       Animated.timing(voiceFadeValue, {
         toValue: 1,
@@ -142,7 +154,7 @@ function TaskListView({
     } else {
       voiceFadeValue.setValue(0);
     }
-  }, [voice.voiceModalVisible]);
+  }, [voice.voiceModalVisible, voiceFadeValue]);
 
   if (loading) {
     return (
@@ -183,7 +195,30 @@ function TaskListView({
           </View>
         </View>
 
-        {/* Filter Buttons + Sort controls */}
+        {/* Search bar */}
+        <View className="mb-3">
+          <View className="flex-row items-center border-2 border-brand-border rounded-xl px-3 py-2 bg-brand-white">
+            <TextInput
+              placeholder="Search tasks..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              className="flex-1 text-base text-brand-textDark"
+              underlineColorAndroid="transparent"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable
+                onPress={() => setSearchQuery("")}
+                className="p-2 rounded-full"
+              >
+                <MaterialIcons name="close" size={18} color="#94A3B8" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Filter Buttons */}
         <View className="flex-row gap-2 mb-2">
           {(["all", "active", "completed"] as const).map((filterType) => (
             <Pressable
@@ -208,6 +243,7 @@ function TaskListView({
           ))}
         </View>
 
+        {/* Sort Buttons */}
         <View className="flex-row gap-2">
           {(
             [
@@ -362,8 +398,8 @@ function TaskListView({
         statusBarTranslucent
         onRequestClose={() => {
           try {
-            // stop is handled in hook via effect
-          } catch {}
+            // stop handled in hook
+          } catch (e) {}
           voice.setVoiceModalVisible(false);
         }}
       >
@@ -399,7 +435,7 @@ function TaskListView({
               </Text>
             </View>
 
-            {/* Retry counter + small debug area */}
+            {/* Retry counter + debug area */}
             <View className="w-full mb-4 items-center">
               <Text className="text-xs text-brand-textGray mb-1">
                 Retries: {voice.retryCount}/{voice.MAX_RETRIES}
@@ -408,7 +444,6 @@ function TaskListView({
                 {voice.listening ? "Listening — speak now" : "Not listening"}
               </Text>
 
-              {/* Debug log preview (top entries) */}
               <View className="w-full border-2 border-brand-border rounded-lg p-2 bg-brand-white">
                 <ScrollView style={{ maxHeight: 120 }}>
                   {voice.debugLogs.length === 0 ? (
@@ -430,7 +465,6 @@ function TaskListView({
               {!voice.listening ? (
                 <Pressable
                   onPress={() => {
-                    // reset counters/logs are handled by hook when starting
                     voice.setOperationModalVisible(false);
                     voice.startListening();
                   }}
@@ -454,8 +488,8 @@ function TaskListView({
               <Pressable
                 onPress={() => {
                   try {
-                    // stop handled by hook effects
-                  } catch {}
+                    // stop handled in hook
+                  } catch (e) {}
                   voice.setVoiceModalVisible(false);
                 }}
                 className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
