@@ -1,16 +1,19 @@
 // App.tsx
-
+import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { TaskListScreen } from "./app/screens/TaskListScreen";
 import { AddTaskScreen } from "./app/screens/AddTaskScreen";
+import { ThemeProvider, useTheme } from "./app/providers/ThemeProvider";
+import { View } from "react-native";
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
   completed: boolean;
   createdAt: number;
-  dueDate?: number; // new
+  dueDate?: number;
 }
 
 export type RootStackParamList = {
@@ -20,23 +23,31 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function RootLayout() {
+function ThemedNavigator() {
+  const { resolved } = useTheme();
+
+  // set header / content background based on resolved theme
+  const headerBg = resolved === "dark" ? "#0F1724" : "#FFFFFF"; // dark vs light
+  const headerTint = resolved === "dark" ? "#E6EEF8" : "#0056B3";
+  const headerTitleColor = resolved === "dark" ? "#E6EEF8" : "#334155";
+  const contentBg = resolved === "dark" ? "#0B1220" : "#FFFFFF";
+
   return (
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
           headerShown: true,
           headerStyle: {
-            backgroundColor: "#FFFFFF",
+            backgroundColor: headerBg,
           },
-          headerTintColor: "#0056B3",
+          headerTintColor: headerTint,
           headerTitleStyle: {
             fontFamily: "Jakarta-Bold",
             fontSize: 18,
-            color: "#334155",
+            color: headerTitleColor,
           },
           contentStyle: {
-            backgroundColor: "#FFFFFF",
+            backgroundColor: contentBg,
           },
         }}
       >
@@ -59,5 +70,13 @@ export default function RootLayout() {
         />
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <ThemedNavigator />
+    </ThemeProvider>
   );
 }

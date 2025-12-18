@@ -21,6 +21,7 @@ import { TaskItem } from "../components/TaskItem";
 import { useFocusEffect } from "@react-navigation/native";
 import AppModal from "../components/AppModal";
 import { useVoice } from "../hooks/useVoice";
+import { useTheme } from "../providers/ThemeProvider";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TaskList">;
 
@@ -46,6 +47,33 @@ export function TaskListScreen({ navigation }: Props) {
 
   // voice hook (handles speech, batch add, etc.)
   const voice = useVoice(onRefresh);
+
+  // theme hook
+  const { resolved, mode, setMode } = useTheme();
+
+  // set native header right button (theme toggle)
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => {
+            // toggle between explicit light and dark
+            const next = resolved === "dark" ? "light" : "dark";
+            setMode(next);
+          }}
+          style={{ marginRight: 12, padding: 6, borderRadius: 8 }}
+          accessibilityLabel="Toggle theme"
+          accessibilityHint="Switch between light and dark themes"
+        >
+          <MaterialIcons
+            name={resolved === "dark" ? "nightlight-round" : "wb-sunny"}
+            size={22}
+            color={resolved === "dark" ? "#E6EEF8" : "#0056B3"}
+          />
+        </Pressable>
+      ),
+    });
+  }, [navigation, resolved, setMode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,18 +186,18 @@ function TaskListView({
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-brand-white">
+      <View className="flex-1 justify-center items-center bg-brand-white dark:bg-brand-darkBlue">
         <ActivityIndicator size="large" color="#0056B3" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-brand-white">
+    <View className="flex-1 bg-brand-white dark:bg-brand-darkBlue">
       {/* Header Stats */}
       <View className="px-4 pt-4 pb-3">
         <View className="flex-row justify-around mb-5 gap-2">
-          <View className="flex-1 bg-brand-primaryLight rounded-2xl p-4">
+          <View className="flex-1 bg-brand-primaryLight rounded-2xl p-4 dark:bg-brand-primaryLight/80">
             <Text className="font-JakartaMedium text-sm text-brand-white mb-1">
               Total Tasks
             </Text>
@@ -197,14 +225,14 @@ function TaskListView({
 
         {/* Search bar */}
         <View className="mb-3">
-          <View className="flex-row items-center border-2 border-brand-border rounded-xl px-3 py-2 bg-brand-white">
+          <View className="flex-row items-center border-2 border-brand-border rounded-xl px-3 py-2 bg-brand-white dark:bg-brand-darkBlue">
             <TextInput
               placeholder="Search tasks..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
               returnKeyType="search"
-              className="flex-1 text-base text-brand-textDark"
+              className="flex-1 text-base text-brand-textDark dark:text-brand-textGray2"
               underlineColorAndroid="transparent"
             />
             {searchQuery.length > 0 && (
@@ -227,14 +255,14 @@ function TaskListView({
               className={`flex-1 py-2 rounded-lg border ${
                 filter === filterType
                   ? "bg-brand-primary border-brand-primary"
-                  : "bg-brand-white border-brand-border"
+                  : "bg-brand-white border-brand-border dark:bg-brand-darkBlue"
               }`}
             >
               <Text
                 className={`text-center font-JakartaMedium text-sm capitalize ${
                   filter === filterType
                     ? "text-brand-white"
-                    : "text-brand-textGray"
+                    : "text-brand-textGray dark:text-brand-textGray2"
                 }`}
               >
                 {filterType}
@@ -258,14 +286,14 @@ function TaskListView({
               className={`flex-1 py-2 rounded-lg border ${
                 sortMode === s.key
                   ? "bg-brand-primary border-brand-primary"
-                  : "bg-brand-white border-brand-border"
+                  : "bg-brand-white border-brand-border dark:bg-brand-darkBlue"
               }`}
             >
               <Text
                 className={`text-center font-JakartaMedium text-sm ${
                   sortMode === s.key
                     ? "text-brand-white"
-                    : "text-brand-textGray"
+                    : "text-brand-textGray dark:text-brand-textGray2"
                 }`}
               >
                 {s.label}
@@ -279,14 +307,14 @@ function TaskListView({
       {filteredTasks.length === 0 ? (
         <View className="flex-1 justify-center items-center">
           <Feather name="inbox" size={48} color="#CBD5E1" />
-          <Text className="font-JakartaSemiBold text-brand-textGray mt-3">
+          <Text className="font-JakartaSemiBold text-brand-textGray mt-3 dark:text-brand-textGray2">
             {filter === "all"
               ? "No tasks yet"
               : filter === "active"
                 ? "All done! Great job"
                 : "No completed tasks"}
           </Text>
-          <Text className="font-Jakarta text-brand-placeholder text-sm mt-1">
+          <Text className="font-Jakarta text-brand-placeholder text-sm mt-1 dark:text-brand-textGray2">
             {filter === "all"
               ? "Create your first task to get started"
               : "Stay productive and add more tasks"}
@@ -347,9 +375,9 @@ function TaskListView({
           <View className="flex-1 bg-black/50 items-end justify-end p-6 mb-20">
             <Animated.View
               style={{ opacity: fabFadeValue }}
-              className="w-full bg-white rounded-2xl p-4"
+              className="w-full bg-white rounded-2xl p-4 dark:bg-brand-darkBlue"
             >
-              <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+              <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brand-textGray2 mb-3">
                 Add Task
               </Text>
 
@@ -359,9 +387,9 @@ function TaskListView({
                     voice.setFabOptionsVisible(false);
                     onAdd();
                   }}
-                  className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+                  className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brand-darkBlue items-center justify-center"
                 >
-                  <Text className="font-JakartaSemiBold text-brand-textDark">
+                  <Text className="font-JakartaSemiBold text-brand-textDark dark:text-brand-textGray2">
                     Add by Text
                   </Text>
                 </Pressable>
@@ -383,7 +411,9 @@ function TaskListView({
                 onPress={() => voice.setFabOptionsVisible(false)}
                 className="mt-4 items-center"
               >
-                <Text className="text-sm text-brand-textGray">Cancel</Text>
+                <Text className="text-sm text-brand-textGray dark:text-brand-textGray2">
+                  Cancel
+                </Text>
               </Pressable>
             </Animated.View>
           </View>
@@ -406,53 +436,56 @@ function TaskListView({
         <View className="flex-1 bg-black/50 items-center justify-center p-6">
           <Animated.View
             style={{ opacity: voiceFadeValue }}
-            className="w-full bg-white rounded-2xl p-6 items-center"
+            className="w-full bg-white rounded-2xl p-6 items-center dark:bg-brand-darkBlue"
           >
-            <Text className="text-lg font-JakartaSemiBold text-brand-textDark mb-2">
+            <Text className="text-lg font-JakartaSemiBold text-brand-textDark dark:text-brand-textGray2 mb-2">
               Voice Input
             </Text>
-            <Text className="text-sm text-brand-textGray mb-4 text-center">
+            <Text className="text-sm text-brand-textGray mb-4 text-center dark:text-brand-textGray2">
               Speak naturally — the app will try to create tasks from what you
               say.
             </Text>
 
             <View className="w-full mb-2 items-center">
-              <Text className="font-Jakarta text-sm text-brand-textGray mb-2">
+              <Text className="font-Jakarta text-sm text-brand-textGray mb-2 dark:text-brand-textGray2">
                 Interim
               </Text>
-              <Text className="text-center text-base text-brand-textDark">
+              <Text className="text-center text-base text-brand-textDark dark:text-brand-textGray2">
                 {voice.interimText ||
                   (voice.listening ? "Listening..." : "Tap Start")}
               </Text>
             </View>
 
             <View className="w-full mb-2 items-center">
-              <Text className="font-Jakarta text-sm text-brand-textGray mb-2">
+              <Text className="font-Jakarta text-sm text-brand-textGray mb-2 dark:text-brand-textGray2">
                 Final
               </Text>
-              <Text className="text-center text-base text-brand-textDark">
+              <Text className="text-center text-base text-brand-textDark dark:text-brand-textGray2">
                 {voice.finalText || "-"}
               </Text>
             </View>
 
             {/* Retry counter + debug area */}
             <View className="w-full mb-4 items-center">
-              <Text className="text-xs text-brand-textGray mb-1">
+              <Text className="text-xs text-brand-textGray mb-1 dark:text-brand-textGray2">
                 Retries: {voice.retryCount}/{voice.MAX_RETRIES}
               </Text>
-              <Text className="text-xs text-brand-placeholder text-center mb-2">
+              <Text className="text-xs text-brand-placeholder text-center mb-2 dark:text-brand-textGray2">
                 {voice.listening ? "Listening — speak now" : "Not listening"}
               </Text>
 
-              <View className="w-full border-2 border-brand-border rounded-lg p-2 bg-brand-white">
+              <View className="w-full border-2 border-brand-border rounded-lg p-2 bg-brand-white dark:bg-brand-darkBlue">
                 <ScrollView style={{ maxHeight: 120 }}>
                   {voice.debugLogs.length === 0 ? (
-                    <Text className="text-xs text-brand-placeholder">
+                    <Text className="text-xs text-brand-placeholder dark:text-brand-textGray2">
                       No logs yet
                     </Text>
                   ) : (
                     voice.debugLogs.slice(0, 12).map((l, i) => (
-                      <Text key={i} className="text-xs text-brand-textGray">
+                      <Text
+                        key={i}
+                        className="text-xs text-brand-textGray dark:text-brand-textGray2"
+                      >
                         {l}
                       </Text>
                     ))
@@ -492,9 +525,9 @@ function TaskListView({
                   } catch (e) {}
                   voice.setVoiceModalVisible(false);
                 }}
-                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brand-darkBlue items-center justify-center"
               >
-                <Text className="font-JakartaSemiBold text-brand-textDark">
+                <Text className="font-JakartaSemiBold text-brand-textDark dark:text-brand-textGray2">
                   Cancel
                 </Text>
               </Pressable>
