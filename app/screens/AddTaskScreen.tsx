@@ -15,6 +15,7 @@ import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { RootStackParamList, Task } from "../../App";
 import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 import AppModal from "../components/AppModal";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
@@ -24,6 +25,12 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const [description, setDescription] = useState(taskToEdit?.description || "");
   const [loading, setLoading] = useState(false);
   const fadeValue = useRef(new Animated.Value(0)).current;
+
+  // due date state (timestamp in ms)
+  const [dueDate, setDueDate] = useState<number | undefined>(
+    taskToEdit?.dueDate
+  );
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -60,7 +67,6 @@ export function AddTaskScreen({ navigation, route }: Props) {
 
   const handleSaveTask = useCallback(async () => {
     if (title.trim().length === 0) {
-      // replaced Alert.alert
       showModal("error", "Required Field", "Please enter a task title");
       return;
     }
@@ -77,16 +83,19 @@ export function AddTaskScreen({ navigation, route }: Props) {
                 ...t,
                 title: title.trim(),
                 description: description.trim() || undefined,
+                dueDate: dueDate ?? undefined,
               }
             : t
         );
       } else {
+        const now = Date.now();
         const newTask: Task = {
-          id: Date.now().toString(),
+          id: now.toString(),
           title: title.trim(),
           description: description.trim() || undefined,
           completed: false,
-          createdAt: Date.now(),
+          createdAt: now,
+          dueDate: dueDate ?? undefined,
         };
         tasks.unshift(newTask);
       }
@@ -94,13 +103,25 @@ export function AddTaskScreen({ navigation, route }: Props) {
       await saveTasks(tasks);
       navigation.goBack();
     } catch (error) {
-      // replaced Alert.alert
       showModal("error", "Error", "Failed to save task");
       console.error(error);
     } finally {
       setLoading(false);
     }
-  }, [title, description, taskToEdit, navigation]);
+  }, [title, description, taskToEdit, navigation, dueDate]);
+
+  const onChangeDate = (_: any, selectedDate?: Date) => {
+    // On iOS the picker remains visible if we don't explicitly close in some cases.
+    setShowDatePicker(Platform.OS === "ios");
+    if (selectedDate) {
+      setDueDate(selectedDate.getTime());
+    }
+  };
+
+  const clearDueDate = () => setDueDate(undefined);
+
+  const formatDate = (ts?: number) =>
+    ts ? new Date(ts).toLocaleDateString() : "No due date";
 
   return (
     <KeyboardAvoidingView
@@ -163,6 +184,41 @@ export function AddTaskScreen({ navigation, route }: Props) {
             </Text>
           </View>
 
+          {/* Due Date */}
+          <View className="mb-8">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+              Due Date (Optional)
+            </Text>
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                onPress={() => setShowDatePicker(true)}
+                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+              >
+                <Text className="font-Jakarta text-brand-textDark">
+                  {formatDate(dueDate)}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={clearDueDate}
+                className="py-3 px-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+              >
+                <Text className="font-Jakarta text-brand-textGray">Clear</Text>
+              </Pressable>
+            </View>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={dueDate ? new Date(dueDate) : new Date()}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={onChangeDate}
+                minimumDate={new Date(2000, 0, 1)}
+                maximumDate={new Date(2100, 11, 31)}
+              />
+            )}
+          </View>
+
           {/* Info Box */}
           <View className="bg-brand-primaryLight/10 rounded-xl p-4 mb-8 flex-row items-start">
             <Feather
@@ -172,8 +228,8 @@ export function AddTaskScreen({ navigation, route }: Props) {
               style={{ marginRight: 12 }}
             />
             <Text className="text-sm text-brand-textDark flex-1">
-              Tasks are saved automatically to your device. You can access them
-              anytime without internet.
+              Tasks are saved to your device when you click the add task button.
+              You can access them anytime without internet.
             </Text>
           </View>
         </View>

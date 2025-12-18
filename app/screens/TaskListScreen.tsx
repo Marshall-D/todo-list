@@ -15,7 +15,7 @@ import {
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList, Task } from "../../App";
-import { useTasks } from "../hooks/useTasks";
+import { useTasks, SortMode } from "../hooks/useTasks";
 import { TaskItem } from "../components/TaskItem";
 import { useFocusEffect } from "@react-navigation/native";
 import AppModal from "../components/AppModal";
@@ -37,9 +37,10 @@ export function TaskListScreen({ navigation }: Props) {
     deleteTask,
     toggleComplete,
     tasks,
+    sortMode,
+    setSortMode,
   } = useTasks();
 
-  // wire voice hook - pass onRefresh so hook can refresh after batch save
   const voice = useVoice(onRefresh);
 
   useFocusEffect(
@@ -70,6 +71,8 @@ export function TaskListScreen({ navigation }: Props) {
       completedCount={completedCount}
       activeCount={activeCount}
       voice={voice}
+      sortMode={sortMode}
+      setSortMode={setSortMode}
     />
   );
 }
@@ -91,6 +94,8 @@ type TaskListViewProps = {
   completedCount: number;
   activeCount: number;
   voice: ReturnType<typeof useVoice>;
+  sortMode: SortMode;
+  setSortMode: (m: SortMode) => void;
 };
 
 function TaskListView({
@@ -108,12 +113,13 @@ function TaskListView({
   completedCount,
   activeCount,
   voice,
+  sortMode,
+  setSortMode,
 }: TaskListViewProps) {
-  // keep local Animated values for fade effects (presentation-only)
+  // local animated values for presentation
   const fabFadeValue = new Animated.Value(0);
   const voiceFadeValue = new Animated.Value(0);
 
-  // animate FAB options modal when its visibility changes (presentation)
   React.useEffect(() => {
     if (voice.fabOptionsVisible) {
       Animated.timing(fabFadeValue, {
@@ -126,7 +132,6 @@ function TaskListView({
     }
   }, [voice.fabOptionsVisible]);
 
-  // animate voice modal when its visibility changes (presentation)
   React.useEffect(() => {
     if (voice.voiceModalVisible) {
       Animated.timing(voiceFadeValue, {
@@ -178,8 +183,8 @@ function TaskListView({
           </View>
         </View>
 
-        {/* Filter Buttons */}
-        <View className="flex-row gap-2">
+        {/* Filter Buttons + Sort controls */}
+        <View className="flex-row gap-2 mb-2">
           {(["all", "active", "completed"] as const).map((filterType) => (
             <Pressable
               key={filterType}
@@ -198,6 +203,36 @@ function TaskListView({
                 }`}
               >
                 {filterType}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View className="flex-row gap-2">
+          {(
+            [
+              { key: "created", label: "Newest" },
+              { key: "dueAsc", label: "Due soon" },
+              { key: "dueDesc", label: "Due latest" },
+            ] as { key: SortMode; label: string }[]
+          ).map((s) => (
+            <Pressable
+              key={s.key}
+              onPress={() => setSortMode(s.key)}
+              className={`flex-1 py-2 rounded-lg border ${
+                sortMode === s.key
+                  ? "bg-brand-primary border-brand-primary"
+                  : "bg-brand-white border-brand-border"
+              }`}
+            >
+              <Text
+                className={`text-center font-JakartaMedium text-sm ${
+                  sortMode === s.key
+                    ? "text-brand-white"
+                    : "text-brand-textGray"
+                }`}
+              >
+                {s.label}
               </Text>
             </Pressable>
           ))}

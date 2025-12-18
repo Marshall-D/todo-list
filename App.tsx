@@ -10,6 +10,7 @@ export interface Task {
   description?: string;
   completed: boolean;
   createdAt: number;
+  dueDate?: number; // new
 }
 
 export type RootStackParamList = {

@@ -46,6 +46,16 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     closeConfirm();
   };
 
+  const formatDue = (ts?: number) => {
+    if (!ts) return null;
+    return new Date(ts).toLocaleDateString();
+  };
+
+  const overdue =
+    typeof task.dueDate === "number" &&
+    task.dueDate < Date.now() &&
+    !task.completed;
+
   return (
     <>
       <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
@@ -100,6 +110,21 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                   numberOfLines={1}
                 >
                   {task.description}
+                </Text>
+              )}
+
+              {/* due date */}
+              {typeof task.dueDate === "number" && (
+                <Text
+                  className={`font-Jakarta text-xs mt-2 ${
+                    task.completed
+                      ? "text-brand-placeholder"
+                      : overdue
+                        ? "text-red-500"
+                        : "text-brand-textGray"
+                  }`}
+                >
+                  Due: {formatDue(task.dueDate)} {overdue ? " • overdue" : ""}
                 </Text>
               )}
             </View>

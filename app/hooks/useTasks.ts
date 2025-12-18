@@ -4,19 +4,23 @@ import type { Task } from "../../App";
 import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 
 export type FilterMode = "all" | "active" | "completed";
+export type SortMode = "created" | "dueAsc" | "dueDesc";
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("created");
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
       const parsed = await getStoredTasks();
-      // keep same ordering as original
-      setTasks(parsed.sort((a: Task, b: Task) => b.createdAt - a.createdAt));
+      // Keep same ordering as original (createdAt desc) before applying sortMode
+      const arr = (parsed || []).slice();
+      arr.sort((a: Task, b: Task) => b.createdAt - a.createdAt);
+      setTasks(arr);
     } catch (error) {
       console.error("Error loading tasks:", error);
     } finally {
@@ -66,10 +70,31 @@ export function useTasks() {
   );
 
   const filteredTasks = useMemo(() => {
-    if (filter === "active") return tasks.filter((t) => !t.completed);
-    if (filter === "completed") return tasks.filter((t) => t.completed);
-    return tasks;
-  }, [tasks, filter]);
+    let base: Task[] = tasks;
+    if (filter === "active") base = tasks.filter((t) => !t.completed);
+    else if (filter === "completed") base = tasks.filter((t) => t.completed);
+    else base = tasks.slice();
+
+    // Apply sorting
+    if (sortMode === "created") {
+      base.sort((a, b) => b.createdAt - a.createdAt);
+    } else if (sortMode === "dueAsc") {
+      base.sort((a, b) => {
+        // tasks with no dueDate should be placed after tasks with a due date
+        const aDue = typeof a.dueDate === "number" ? a.dueDate : Infinity;
+        const bDue = typeof b.dueDate === "number" ? b.dueDate : Infinity;
+        return aDue - bDue;
+      });
+    } else if (sortMode === "dueDesc") {
+      base.sort((a, b) => {
+        const aDue = typeof a.dueDate === "number" ? a.dueDate : -Infinity;
+        const bDue = typeof b.dueDate === "number" ? b.dueDate : -Infinity;
+        return bDue - aDue;
+      });
+    }
+
+    return base;
+  }, [tasks, filter, sortMode]);
 
   const completedCount = useMemo(
     () => tasks.filter((t) => t.completed).length,
@@ -86,6 +111,8 @@ export function useTasks() {
     refreshing,
     filter,
     setFilter,
+    sortMode,
+    setSortMode,
     loadTasks,
     onRefresh,
     deleteTask,
