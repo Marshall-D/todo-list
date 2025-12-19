@@ -6,8 +6,9 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { View, useColorScheme } from "react-native";
+import { View, useColorScheme, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import colors from "../utils/themes/colors";
 
 type ThemeMode = "light" | "dark" | "system";
 const STORAGE_KEY = "themePreference";
@@ -24,6 +25,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const system = useColorScheme(); // 'light' | 'dark' | null
   const [mode, setModeInternal] = useState<ThemeMode>("system");
+
   const resolved: "light" | "dark" =
     mode === "system" ? (system === "dark" ? "dark" : "light") : mode;
 
@@ -40,11 +42,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, []);
-
-  useEffect(() => {
-    // when resolved changes, nothing else to do here;
-    // root wrapper below will re-render and apply 'dark' class
-  }, [resolved]);
 
   const setMode = async (m: ThemeMode) => {
     try {
@@ -66,16 +63,58 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [mode, resolved]
   );
 
-  // NativeWind: to trigger `dark:` variant, add 'dark' class to a top-level container.
-  // We render a View with className "dark" when resolved === "dark".
+  // Root view: apply explicit backgroundColor for reliability AND apply `dark` class
+  // so nativewind `dark:` variants still work for children.
+  // NOTE: we intentionally use both a style backgroundColor (guaranteed) and className (nativewind)
   return (
     <ThemeContext.Provider value={value}>
-      <View className={resolved === "dark" ? "dark flex-1" : "flex-1"}>
+      <View
+        // nativewind class for `dark:` variants; keep flex-1 for layout
+        className={resolved === "dark" ? "dark flex-1" : "flex-1"}
+        // explicit background ensures whole app is black in dark mode immediately
+        style={{
+          flex: 1,
+          backgroundColor:
+            resolved === "dark" ? colors.brand.black : colors.brand.white,
+        }}
+      >
+        {/* small dev badge — remove later */}
+        <View style={styles.badgeContainer} pointerEvents="none">
+          <Text
+            style={[
+              styles.badge,
+              { color: resolved === "dark" ? "#fff" : "#000" },
+            ]}
+          >
+            theme: {resolved}
+          </Text>
+        </View>
+
         {children}
       </View>
     </ThemeContext.Provider>
   );
 }
+
+const styles = StyleSheet.create({
+  badgeContainer: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 1000,
+  },
+  badge: {
+    backgroundColor: "transparent",
+    fontSize: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    fontFamily: "Jakarta",
+    // slight text shadow for readability
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowRadius: 1,
+  },
+});
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);

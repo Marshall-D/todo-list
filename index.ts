@@ -1,3 +1,5 @@
+// index.ts
+
 import { registerRootComponent } from "expo";
 import "./global.css";
 

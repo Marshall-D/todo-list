@@ -10,6 +10,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useTheme } from "../providers/ThemeProvider";
 import colors from "../utils/themes/colors";
 
 export type AppModalType = "success" | "error" | "info" | "confirm";
@@ -19,15 +20,12 @@ export interface AppModalProps {
   type?: AppModalType;
   title?: string;
   message?: string;
-  // single-button flow
   onClose?: () => void;
   continueLabel?: string;
-  // confirm flow
   onConfirm?: () => void;
   onCancel?: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
-  // optional container style override
   containerStyle?: StyleProp<ViewStyle>;
 }
 
@@ -44,6 +42,7 @@ export default function AppModal({
   cancelLabel,
   containerStyle,
 }: AppModalProps) {
+  const { resolved } = useTheme();
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -99,14 +98,19 @@ export default function AppModal({
       : isError
         ? "close"
         : "alert-circle";
-  const iconColor = isSuccess
-    ? colors.brand.success
-    : isError
-      ? colors.brand.error
-      : isInfo
-        ? colors.brand.primaryLight
-        : colors.brand.yellow;
-  const bgClass = isSuccess ? "bg-brand-successLight" : "bg-red-100";
+
+  const iconColor =
+    resolved === "dark"
+      ? isSuccess
+        ? colors.brandDark.success
+        : isError
+          ? colors.brandDark.error
+          : colors.brandDark.primaryLight
+      : isSuccess
+        ? colors.brand.success
+        : isError
+          ? colors.brand.error
+          : colors.brand.primaryLight;
 
   return (
     <Modal
@@ -115,13 +119,13 @@ export default function AppModal({
       animationType="fade"
       statusBarTranslucent
     >
-      <View className="flex-1 bg-black items-center justify-center px-6">
+      <View className="flex-1 bg-black/60 items-center justify-center px-6">
         <Animated.View
           style={{
             transform: [{ scale: scaleAnim }],
             opacity: opacityAnim,
           }}
-          className="w-full bg-white rounded-2xl p-6 items-center shadow-lg"
+          className="w-full bg-brand-white dark:bg-brand-success rounded-2xl p-6 items-center shadow-lg"
         >
           <View
             className={`w-16 h-16 rounded-full items-center justify-center mb-4 ${
@@ -131,22 +135,21 @@ export default function AppModal({
             <Ionicons name={iconName as any} size={36} color={iconColor} />
           </View>
 
-          <Text className="text-xl font-JakartaSemiBold text-brand-darkBlue text-center mb-2">
+          <Text className="text-xl font-JakartaSemiBold text-brand-darkBlue dark:text-brandDark-text text-center mb-2">
             {defaultTitle}
           </Text>
 
-          <Text className="text-sm text-brand-textGray text-center mb-6">
+          <Text className="text-sm text-brand-textGray dark:text-brandDark-textMuted text-center mb-6">
             {defaultMessage}
           </Text>
 
-          {/* confirm (two-button) */}
           {isConfirm ? (
             <View className="w-full flex-row gap-3">
               <TouchableOpacity
                 onPress={onCancel}
-                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center"
+                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center"
               >
-                <Text className="font-JakartaSemiBold text-center text-brand-textDark">
+                <Text className="font-JakartaSemiBold text-center text-brand-textDark dark:text-brandDark-text">
                   {cancelLabel ?? "Cancel"}
                 </Text>
               </TouchableOpacity>
@@ -161,7 +164,6 @@ export default function AppModal({
               </TouchableOpacity>
             </View>
           ) : (
-            // single-button (Continue / OK)
             <TouchableOpacity
               onPress={onClose}
               className="w-full py-3 rounded-xl bg-brand-primary items-center"

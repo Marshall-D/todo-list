@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { TaskListScreen } from "./app/screens/TaskListScreen";
 import { AddTaskScreen } from "./app/screens/AddTaskScreen";
 import { ThemeProvider, useTheme } from "./app/providers/ThemeProvider";
-import { View } from "react-native";
+import colors from "./app/utils/themes/colors";
 
 export interface Task {
   id: string;
@@ -27,10 +27,14 @@ function ThemedNavigator() {
   const { resolved } = useTheme();
 
   // set header / content background based on resolved theme
-  const headerBg = resolved === "dark" ? "#0F1724" : "#FFFFFF"; // dark vs light
-  const headerTint = resolved === "dark" ? "#E6EEF8" : "#0056B3";
-  const headerTitleColor = resolved === "dark" ? "#E6EEF8" : "#334155";
-  const contentBg = resolved === "dark" ? "#0B1220" : "#FFFFFF";
+  const headerBg =
+    resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
+  const headerTint =
+    resolved === "dark" ? colors.brandDark.text : colors.brand.primary;
+  const headerTitleColor =
+    resolved === "dark" ? colors.brandDark.text : colors.brand.textDark;
+  const contentBg =
+    resolved === "dark" ? colors.brand.black : colors.brand.white;
 
   return (
     <NavigationContainer>

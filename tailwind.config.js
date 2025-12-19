@@ -1,10 +1,10 @@
 // tailwind.config.js
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}"],
 
   presets: [require("nativewind/preset")],
-  darkMode: "class", // <-- enable class strategy
 
   theme: {
     extend: {
@@ -36,6 +36,27 @@ module.exports = {
           error: "#E11D48",
           pink: "#FFE0ED",
           yellow: "#F59E0B",
+        },
+        // Dark-mode specific tokens (explicit group)
+        brandDark: {
+          // main surfaces
+          bg: "#000000", // pure black root bg
+          surface: "#071125", // slightly lighter than black, keeps navy tint
+          // accents
+          primary: "#0B6CB0", // primary accent on dark surfaces
+          primaryLight: "#1A84C6",
+          // subtle chrome
+          border: "#1F2933",
+          // text
+          text: "#E6EEF8", // primary text (off-white, cool)
+          textMuted: "#9AA6B2", // secondary text
+          placeholder: "#6B7780",
+          // feedback
+          success: "#16A34A",
+          successLight: "#064E2D",
+          error: "#F87171",
+          yellow: "#F59E0B",
+          pink: "#3A2430",
         },
       },
     },

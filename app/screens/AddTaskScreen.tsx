@@ -16,6 +16,8 @@ import type { RootStackParamList, Task } from "../../App";
 import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 import AppModal from "../components/AppModal";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useTheme } from "../providers/ThemeProvider";
+import colors from "../utils/themes/colors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
@@ -26,13 +28,11 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const fadeValue = useRef(new Animated.Value(0)).current;
 
-  // due date state (timestamp in ms)
   const [dueDate, setDueDate] = useState<number | undefined>(
     taskToEdit?.dueDate
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<"success" | "error" | "info">(
     "info"
@@ -41,6 +41,8 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const [modalMessage, setModalMessage] = useState<string | undefined>(
     undefined
   );
+
+  const { resolved } = useTheme();
 
   useEffect(() => {
     Animated.timing(fadeValue, {
@@ -111,7 +113,6 @@ export function AddTaskScreen({ navigation, route }: Props) {
   }, [title, description, taskToEdit, navigation, dueDate]);
 
   const onChangeDate = (_: any, selectedDate?: Date) => {
-    // On iOS the picker remains visible if we don't explicitly close in some cases.
     setShowDatePicker(Platform.OS === "ios");
     if (selectedDate) {
       setDueDate(selectedDate.getTime());
@@ -123,10 +124,13 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const formatDate = (ts?: number) =>
     ts ? new Date(ts).toLocaleDateString() : "No due date";
 
+  const iconColor =
+    resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-brand-white"
+      className="flex-1 bg-brand-white dark:bg-brand-black"
     >
       <Animated.ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
@@ -137,14 +141,14 @@ export function AddTaskScreen({ navigation, route }: Props) {
         <View className="flex-1">
           {/* Title Section */}
           <View className="mb-8 mt-4">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
               Task Title
             </Text>
-            <View className="flex-row items-center border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white">
+            <View className="flex-row items-center border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white dark:bg-brandDark-surface">
               <MaterialIcons
                 name="edit-note"
                 size={20}
-                color="#0056B3"
+                color={iconColor}
                 style={{ marginRight: 12 }}
               />
               <TextInput
@@ -153,20 +157,20 @@ export function AddTaskScreen({ navigation, route }: Props) {
                 value={title}
                 onChangeText={setTitle}
                 maxLength={100}
-                className="flex-1 text-base text-brand-textDark"
+                className="flex-1 text-base text-brand-textDark dark:text-brandDark-text"
               />
             </View>
-            <Text className="text-xs text-brand-placeholder mt-2">
+            <Text className="text-xs text-brand-placeholder dark:text-brandDark-textMuted mt-2">
               {title.length}/100
             </Text>
           </View>
 
           {/* Description Section */}
           <View className="mb-8">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
               Description (Optional)
             </Text>
-            <View className="border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white">
+            <View className="border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white dark:bg-brandDark-surface">
               <TextInput
                 placeholder="Add more details about your task..."
                 placeholderTextColor="#94A3B8"
@@ -176,34 +180,36 @@ export function AddTaskScreen({ navigation, route }: Props) {
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
-                className="text-base text-brand-textDark"
+                className="text-base text-brand-textDark dark:text-brandDark-text"
               />
             </View>
-            <Text className="text-xs text-brand-placeholder mt-2">
+            <Text className="text-xs text-brand-placeholder dark:text-brandDark-textMuted mt-2">
               {description.length}/500
             </Text>
           </View>
 
           {/* Due Date */}
           <View className="mb-8">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark mb-3">
+            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
               Due Date (Optional)
             </Text>
             <View className="flex-row items-center gap-3">
               <Pressable
                 onPress={() => setShowDatePicker(true)}
-                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center justify-center"
               >
-                <Text className="font-Jakarta text-brand-textDark">
+                <Text className="font-Jakarta text-brand-textDark dark:text-brandDark-text">
                   {formatDate(dueDate)}
                 </Text>
               </Pressable>
 
               <Pressable
                 onPress={clearDueDate}
-                className="py-3 px-3 rounded-xl border-2 border-brand-border bg-brand-white items-center justify-center"
+                className="py-3 px-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center justify-center"
               >
-                <Text className="font-Jakarta text-brand-textGray">Clear</Text>
+                <Text className="font-Jakarta text-brand-textGray dark:text-brandDark-textMuted">
+                  Clear
+                </Text>
               </Pressable>
             </View>
 
@@ -220,14 +226,14 @@ export function AddTaskScreen({ navigation, route }: Props) {
           </View>
 
           {/* Info Box */}
-          <View className="bg-brand-primaryLight/10 rounded-xl p-4 mb-8 flex-row items-start">
+          <View className="bg-brand-primaryLight/10 rounded-xl p-4 mb-8 flex-row items-start dark:bg-brandDark-surface">
             <Feather
               name="info"
               size={18}
-              color="#0056B3"
+              color={iconColor}
               style={{ marginRight: 12 }}
             />
-            <Text className="text-sm text-brand-textDark flex-1">
+            <Text className="text-sm text-brand-textDark dark:text-brandDark-text flex-1">
               Tasks are saved to your device when you click the add task button.
               You can access them anytime without internet.
             </Text>
@@ -238,9 +244,9 @@ export function AddTaskScreen({ navigation, route }: Props) {
         <View className="flex-row gap-3 my-16">
           <Pressable
             onPress={() => navigation.goBack()}
-            className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white"
+            className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface"
           >
-            <Text className="font-JakartaSemiBold text-center text-brand-textDark">
+            <Text className="font-JakartaSemiBold text-center text-brand-textDark dark:text-brandDark-text">
               Cancel
             </Text>
           </Pressable>

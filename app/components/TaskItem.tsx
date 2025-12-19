@@ -10,6 +10,8 @@ import {
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { Task } from "../../App";
 import AppModal from "./AppModal";
+import { useTheme } from "../providers/ThemeProvider";
+import colors from "../utils/themes/colors";
 
 export interface TaskItemProps {
   task: Task;
@@ -21,6 +23,7 @@ export interface TaskItemProps {
 export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
   const scaleValue = useRef(new Animated.Value(1)).current;
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const { resolved } = useTheme();
 
   const handlePressIn = () => {
     Animated.spring(scaleValue, {
@@ -36,7 +39,6 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     }).start();
   };
 
-  // wrapper to ensure onToggle receives id (not GestureResponderEvent)
   const handleToggle = (_e?: GestureResponderEvent) => onToggle(task.id);
 
   const openConfirm = () => setConfirmVisible(true);
@@ -56,6 +58,12 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     task.dueDate < Date.now() &&
     !task.completed;
 
+  // icon colors respect theme
+  const editColor =
+    resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
+  const trashColor =
+    resolved === "dark" ? colors.brandDark.error : colors.brand.error;
+
   return (
     <>
       <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
@@ -65,8 +73,8 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
           onPress={handleToggle}
           className={`mb-3 rounded-xl p-4 border-l-4 flex-row items-center justify-between ${
             task.completed
-              ? "bg-brand-successLight border-brand-success"
-              : "bg-brand-grayBlue border-brand-primary"
+              ? "bg-brand-successLight border-brand-success dark:bg-brandDark-surface"
+              : "bg-brand-grayBlue border-brand-primary dark:bg-brandDark-surface dark:border-brandDark-primary"
           }`}
           style={{
             shadowColor: "#000",
@@ -80,8 +88,8 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
             <Animated.View
               className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
                 task.completed
-                  ? "bg-brand-success border-brand-success"
-                  : "border-brand-primary"
+                  ? "bg-brand-success border-brand-success dark:bg-brandDark-success"
+                  : "border-brand-primary dark:border-brandDark-primary"
               }`}
             >
               {task.completed && (
@@ -93,8 +101,8 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
               <Text
                 className={`font-JakartaSemiBold text-base ${
                   task.completed
-                    ? "line-through text-brand-placeholder"
-                    : "text-brand-textDark"
+                    ? "line-through text-brand-placeholder dark:text-brandDark-textMuted"
+                    : "text-brand-textDark dark:text-brandDark-text"
                 }`}
                 numberOfLines={2}
               >
@@ -104,8 +112,8 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                 <Text
                   className={`font-Jakarta text-sm mt-1 ${
                     task.completed
-                      ? "text-brand-placeholder"
-                      : "text-brand-textGray"
+                      ? "text-brand-placeholder dark:text-brandDark-textMuted"
+                      : "text-brand-textGray dark:text-brandDark-textMuted"
                   }`}
                   numberOfLines={1}
                 >
@@ -113,15 +121,14 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                 </Text>
               )}
 
-              {/* due date */}
               {typeof task.dueDate === "number" && (
                 <Text
                   className={`font-Jakarta text-xs mt-2 ${
                     task.completed
-                      ? "text-brand-placeholder"
+                      ? "text-brand-placeholder dark:text-brandDark-textMuted"
                       : overdue
                         ? "text-red-500"
-                        : "text-brand-textGray"
+                        : "text-brand-textGray dark:text-brandDark-textMuted"
                   }`}
                 >
                   Due: {formatDue(task.dueDate)} {overdue ? " • overdue" : ""}
@@ -134,16 +141,16 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
             <Pressable
               onPress={onEdit}
               className="p-2 rounded-lg"
-              style={{ opacity: 0.7 }}
+              style={{ opacity: 0.9 }}
             >
-              <Feather name="edit-2" size={18} color="#0056B3" />
+              <Feather name="edit-2" size={18} color={editColor} />
             </Pressable>
             <Pressable
               onPress={openConfirm}
               className="p-2 rounded-lg"
-              style={{ opacity: 0.7 }}
+              style={{ opacity: 0.9 }}
             >
-              <Feather name="trash-2" size={18} color="#E11D48" />
+              <Feather name="trash-2" size={18} color={trashColor} />
             </Pressable>
           </View>
         </Pressable>
