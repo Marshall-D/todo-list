@@ -6,6 +6,7 @@ import {
   Pressable,
   Animated,
   GestureResponderEvent,
+  StyleSheet,
 } from "react-native";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { Task } from "../../App";
@@ -33,10 +34,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleValue, { toValue: 1, useNativeDriver: true }).start();
   };
 
   const handleToggle = (_e?: GestureResponderEvent) => onToggle(task.id);
@@ -58,11 +56,55 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     task.dueDate < Date.now() &&
     !task.completed;
 
-  // icon colors respect theme
+  // colors derived from tokens
   const editColor =
     resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
   const trashColor =
     resolved === "dark" ? colors.brandDark.error : colors.brand.error;
+
+  // container background and border-left color
+  const containerBg = task.completed
+    ? resolved === "dark"
+      ? colors.brandDark.surface
+      : colors.brand.successLight
+    : resolved === "dark"
+      ? colors.brandDark.surface
+      : colors.brand.grayBlue;
+
+  const leftBorderColor = task.completed
+    ? resolved === "dark"
+      ? colors.brandDark.success
+      : colors.brand.success
+    : resolved === "dark"
+      ? colors.brandDark.primary
+      : colors.brand.primary;
+
+  // inner text colors
+  const titleColor = task.completed
+    ? resolved === "dark"
+      ? colors.brandDark.textMuted
+      : colors.brand.placeholder
+    : resolved === "dark"
+      ? colors.brandDark.text
+      : colors.brand.textDark;
+
+  const descColor = task.completed
+    ? resolved === "dark"
+      ? colors.brandDark.textMuted
+      : colors.brand.placeholder
+    : resolved === "dark"
+      ? colors.brandDark.textMuted
+      : colors.brand.textGray;
+
+  const dueColor = task.completed
+    ? resolved === "dark"
+      ? colors.brandDark.textMuted
+      : colors.brand.placeholder
+    : overdue
+      ? "#EF4444" // red-500
+      : resolved === "dark"
+        ? colors.brandDark.textMuted
+        : colors.brand.textGray;
 
   return (
     <>
@@ -71,26 +113,34 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           onPress={handleToggle}
-          className={`mb-3 rounded-xl p-4 border-l-4 flex-row items-center justify-between ${
-            task.completed
-              ? "bg-brand-successLight border-brand-success dark:bg-brandDark-surface"
-              : "bg-brand-grayBlue border-brand-primary dark:bg-brandDark-surface dark:border-brandDark-primary"
-          }`}
-          style={{
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 3,
-            elevation: 2,
-          }}
+          className="mb-3 rounded-xl p-4 flex-row items-center justify-between"
+          style={[
+            styles.shadow,
+            {
+              backgroundColor: containerBg,
+              borderLeftWidth: 6,
+              borderLeftColor: leftBorderColor,
+            },
+          ]}
         >
           <View className="flex-1 flex-row items-center">
             <Animated.View
-              className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
-                task.completed
-                  ? "bg-brand-success border-brand-success dark:bg-brandDark-success"
-                  : "border-brand-primary dark:border-brandDark-primary"
-              }`}
+              className="w-5 h-5 rounded-full mr-3 items-center justify-center"
+              style={{
+                backgroundColor: task.completed
+                  ? resolved === "dark"
+                    ? colors.brandDark.success
+                    : colors.brand.success
+                  : "transparent",
+                borderWidth: 2,
+                borderColor: task.completed
+                  ? resolved === "dark"
+                    ? colors.brandDark.success
+                    : colors.brand.success
+                  : resolved === "dark"
+                    ? colors.brandDark.primary
+                    : colors.brand.primary,
+              }}
             >
               {task.completed && (
                 <MaterialIcons name="check" size={14} color="white" />
@@ -99,22 +149,15 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
 
             <View className="flex-1">
               <Text
-                className={`font-JakartaSemiBold text-base ${
-                  task.completed
-                    ? "line-through text-brand-placeholder dark:text-brandDark-textMuted"
-                    : "text-brand-textDark dark:text-brandDark-text"
-                }`}
+                style={[styles.title, { color: titleColor }]}
                 numberOfLines={2}
               >
                 {task.title}
               </Text>
+
               {task.description && (
                 <Text
-                  className={`font-Jakarta text-sm mt-1 ${
-                    task.completed
-                      ? "text-brand-placeholder dark:text-brandDark-textMuted"
-                      : "text-brand-textGray dark:text-brandDark-textMuted"
-                  }`}
+                  style={[styles.desc, { color: descColor }]}
                   numberOfLines={1}
                 >
                   {task.description}
@@ -122,15 +165,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
               )}
 
               {typeof task.dueDate === "number" && (
-                <Text
-                  className={`font-Jakarta text-xs mt-2 ${
-                    task.completed
-                      ? "text-brand-placeholder dark:text-brandDark-textMuted"
-                      : overdue
-                        ? "text-red-500"
-                        : "text-brand-textGray dark:text-brandDark-textMuted"
-                  }`}
-                >
+                <Text style={[styles.due, { color: dueColor }]}>
                   Due: {formatDue(task.dueDate)} {overdue ? " • overdue" : ""}
                 </Text>
               )}
@@ -169,3 +204,27 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  shadow: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  title: {
+    fontFamily: "Jakarta-SemiBold",
+    fontSize: 16,
+  },
+  desc: {
+    fontFamily: "Jakarta",
+    fontSize: 14,
+    marginTop: 4,
+  },
+  due: {
+    fontFamily: "Jakarta",
+    fontSize: 12,
+    marginTop: 8,
+  },
+});

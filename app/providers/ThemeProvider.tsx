@@ -78,18 +78,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             resolved === "dark" ? colors.brand.black : colors.brand.white,
         }}
       >
-        {/* small dev badge — remove later */}
-        <View style={styles.badgeContainer} pointerEvents="none">
-          <Text
-            style={[
-              styles.badge,
-              { color: resolved === "dark" ? "#fff" : "#000" },
-            ]}
-          >
-            theme: {resolved}
-          </Text>
-        </View>
-
         {children}
       </View>
     </ThemeContext.Provider>

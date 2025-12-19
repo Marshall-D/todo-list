@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StyleSheet,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -43,6 +44,7 @@ export default function AppModal({
   containerStyle,
 }: AppModalProps) {
   const { resolved } = useTheme();
+
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -68,7 +70,6 @@ export default function AppModal({
 
   const isSuccess = type === "success";
   const isError = type === "error";
-  const isInfo = type === "info";
   const isConfirm = type === "confirm";
 
   const defaultTitle = title
@@ -93,11 +94,23 @@ export default function AppModal({
 
   const iconName = isSuccess
     ? "checkmark"
-    : isInfo
-      ? "information-circle"
-      : isError
-        ? "close"
-        : "alert-circle";
+    : isError
+      ? "close"
+      : isConfirm
+        ? "alert-circle"
+        : "information-circle";
+
+  // theme colors (from your tokens)
+  const bgSurface =
+    resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
+  const textPrimary =
+    resolved === "dark" ? colors.brandDark.text : colors.brand.textDark;
+  const textMuted =
+    resolved === "dark" ? colors.brandDark.textMuted : colors.brand.textGray;
+  const borderColor =
+    resolved === "dark" ? colors.brandDark.border : colors.brand.border;
+  const primaryBg =
+    resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
 
   const iconColor =
     resolved === "dark"
@@ -112,6 +125,12 @@ export default function AppModal({
           ? colors.brand.error
           : colors.brand.primaryLight;
 
+  const circleBg = isSuccess
+    ? resolved === "dark"
+      ? colors.brandDark.successLight
+      : colors.brand.successLight
+    : colors.brand.pink;
+
   return (
     <Modal
       visible={visible}
@@ -119,46 +138,62 @@ export default function AppModal({
       animationType="fade"
       statusBarTranslucent
     >
-      <View className="flex-1 bg-black/60 items-center justify-center px-6">
+      <View style={[styles.overlay]}>
         <Animated.View
-          style={{
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
-          }}
-          className="w-full bg-brand-white dark:bg-brand-success rounded-2xl p-6 items-center shadow-lg"
+          style={[
+            {
+              transform: [{ scale: scaleAnim }],
+              opacity: opacityAnim,
+              backgroundColor: bgSurface,
+            },
+            styles.container,
+            containerStyle as any,
+          ]}
         >
-          <View
-            className={`w-16 h-16 rounded-full items-center justify-center mb-4 ${
-              isSuccess ? "bg-brand-successLight" : "bg-brand-pink"
-            }`}
-          >
+          <View style={[styles.iconCircle, { backgroundColor: circleBg }]}>
             <Ionicons name={iconName as any} size={36} color={iconColor} />
           </View>
 
-          <Text className="text-xl font-JakartaSemiBold text-brand-darkBlue dark:text-brandDark-text text-center mb-2">
+          <Text style={[styles.title, { color: textPrimary }]}>
             {defaultTitle}
           </Text>
 
-          <Text className="text-sm text-brand-textGray dark:text-brandDark-textMuted text-center mb-6">
+          <Text style={[styles.message, { color: textMuted }]}>
             {defaultMessage}
           </Text>
 
           {isConfirm ? (
-            <View className="w-full flex-row gap-3">
+            <View style={styles.buttonRow}>
               <TouchableOpacity
                 onPress={onCancel}
-                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center"
+                style={[
+                  styles.btn,
+                  {
+                    flex: 1,
+                    borderWidth: 2,
+                    borderColor,
+                    backgroundColor: bgSurface,
+                    marginRight: 8,
+                  },
+                ]}
               >
-                <Text className="font-JakartaSemiBold text-center text-brand-textDark dark:text-brandDark-text">
+                <Text style={[styles.btnText, { color: textPrimary }]}>
                   {cancelLabel ?? "Cancel"}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={onConfirm}
-                className="flex-1 py-3 rounded-xl bg-brand-primary items-center"
+                style={[
+                  styles.btn,
+                  {
+                    flex: 1,
+                    backgroundColor: primaryBg,
+                    marginLeft: 8,
+                  },
+                ]}
               >
-                <Text className="text-center text-white font-JakartaSemiBold">
+                <Text style={[styles.btnText, { color: "#fff" }]}>
                   {confirmLabel ?? "Confirm"}
                 </Text>
               </TouchableOpacity>
@@ -166,9 +201,9 @@ export default function AppModal({
           ) : (
             <TouchableOpacity
               onPress={onClose}
-              className="w-full py-3 rounded-xl bg-brand-primary items-center"
+              style={[styles.singleBtn, { backgroundColor: primaryBg }]}
             >
-              <Text className="text-center text-white font-JakartaSemiBold">
+              <Text style={[styles.btnText, { color: "#fff" }]}>
                 {continueLabel ?? "Continue"}
               </Text>
             </TouchableOpacity>
@@ -178,3 +213,65 @@ export default function AppModal({
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  container: {
+    width: "100%",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    // shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: "Jakarta-SemiBold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  message: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    width: "100%",
+  },
+  btn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  singleBtn: {
+    width: "100%",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnText: {
+    fontFamily: "Jakarta-SemiBold",
+    fontSize: 14,
+  },
+});

@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  StyleSheet,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
@@ -50,7 +51,6 @@ export function AddTaskScreen({ navigation, route }: Props) {
       duration: 300,
       useNativeDriver: true,
     }).start();
-
     navigation.setOptions({
       headerTitle: taskToEdit ? "Edit Task" : "Add Task",
     });
@@ -120,17 +120,26 @@ export function AddTaskScreen({ navigation, route }: Props) {
   };
 
   const clearDueDate = () => setDueDate(undefined);
-
   const formatDate = (ts?: number) =>
     ts ? new Date(ts).toLocaleDateString() : "No due date";
-
   const iconColor =
     resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
+
+  const rootBg = resolved === "dark" ? colors.brand.black : colors.brand.white;
+  const surfaceBg =
+    resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
+  const textPrimary =
+    resolved === "dark" ? colors.brandDark.text : colors.brand.textDark;
+  const textMuted =
+    resolved === "dark" ? colors.brandDark.textMuted : colors.brand.textGray;
+  const borderColor =
+    resolved === "dark" ? colors.brandDark.border : colors.brand.border;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-brand-white dark:bg-brand-black"
+      className="flex-1"
+      style={{ backgroundColor: rootBg }}
     >
       <Animated.ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
@@ -141,75 +150,109 @@ export function AddTaskScreen({ navigation, route }: Props) {
         <View className="flex-1">
           {/* Title Section */}
           <View className="mb-8 mt-4">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
+            <Text style={[styles.heading, { color: textPrimary }]}>
               Task Title
             </Text>
-            <View className="flex-row items-center border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white dark:bg-brandDark-surface">
+
+            <View
+              className="flex-row items-center rounded-xl px-4 py-3"
+              style={{
+                borderWidth: 2,
+                borderColor,
+                backgroundColor: surfaceBg,
+              }}
+            >
               <MaterialIcons
                 name="edit-note"
                 size={20}
                 color={iconColor}
                 style={{ marginRight: 12 }}
               />
+
               <TextInput
                 placeholder="What needs to be done?"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={colors.brand.placeholder}
                 value={title}
                 onChangeText={setTitle}
                 maxLength={100}
-                className="flex-1 text-base text-brand-textDark dark:text-brandDark-text"
+                className="flex-1 text-base"
+                style={{ color: textPrimary }}
               />
             </View>
-            <Text className="text-xs text-brand-placeholder dark:text-brandDark-textMuted mt-2">
+
+            <Text style={[styles.small, { color: textMuted, marginTop: 8 }]}>
               {title.length}/100
             </Text>
           </View>
 
           {/* Description Section */}
           <View className="mb-8">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
+            <Text
+              style={[styles.heading, { color: textPrimary, marginBottom: 8 }]}
+            >
               Description (Optional)
             </Text>
-            <View className="border-2 border-brand-border rounded-xl px-4 py-3 bg-brand-white dark:bg-brandDark-surface">
+
+            <View
+              className="rounded-xl px-4 py-3"
+              style={{
+                borderWidth: 2,
+                borderColor,
+                backgroundColor: surfaceBg,
+              }}
+            >
               <TextInput
                 placeholder="Add more details about your task..."
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={colors.brand.placeholder}
                 value={description}
                 onChangeText={setDescription}
                 maxLength={500}
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
-                className="text-base text-brand-textDark dark:text-brandDark-text"
+                className="text-base"
+                style={{ color: textPrimary }}
               />
             </View>
-            <Text className="text-xs text-brand-placeholder dark:text-brandDark-textMuted mt-2">
+
+            <Text style={[styles.small, { color: textMuted, marginTop: 8 }]}>
               {description.length}/500
             </Text>
           </View>
 
           {/* Due Date */}
           <View className="mb-8">
-            <Text className="font-JakartaSemiBold text-lg text-brand-textDark dark:text-brandDark-text mb-3">
+            <Text
+              style={[styles.heading, { color: textPrimary, marginBottom: 8 }]}
+            >
               Due Date (Optional)
             </Text>
+
             <View className="flex-row items-center gap-3">
               <Pressable
                 onPress={() => setShowDatePicker(true)}
-                className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center justify-center"
+                className="flex-1 py-3 rounded-xl items-center justify-center"
+                style={{
+                  borderWidth: 2,
+                  borderColor,
+                  backgroundColor: surfaceBg,
+                }}
               >
-                <Text className="font-Jakarta text-brand-textDark dark:text-brandDark-text">
+                <Text style={{ color: textPrimary }}>
                   {formatDate(dueDate)}
                 </Text>
               </Pressable>
 
               <Pressable
                 onPress={clearDueDate}
-                className="py-3 px-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface items-center justify-center"
+                className="py-3 px-3 rounded-xl items-center justify-center"
+                style={{
+                  borderWidth: 2,
+                  borderColor,
+                  backgroundColor: surfaceBg,
+                }}
               >
-                <Text className="font-Jakarta text-brand-textGray dark:text-brandDark-textMuted">
-                  Clear
-                </Text>
+                <Text style={{ color: textMuted }}>Clear</Text>
               </Pressable>
             </View>
 
@@ -226,14 +269,22 @@ export function AddTaskScreen({ navigation, route }: Props) {
           </View>
 
           {/* Info Box */}
-          <View className="bg-brand-primaryLight/10 rounded-xl p-4 mb-8 flex-row items-start dark:bg-brandDark-surface">
+          <View
+            className="rounded-xl p-4 mb-8 flex-row items-start"
+            style={{
+              backgroundColor:
+                resolved === "dark"
+                  ? colors.brandDark.surface
+                  : "rgba(82,134,190,0.08)",
+            }}
+          >
             <Feather
               name="info"
               size={18}
               color={iconColor}
               style={{ marginRight: 12 }}
             />
-            <Text className="text-sm text-brand-textDark dark:text-brandDark-text flex-1">
+            <Text style={{ color: textPrimary, flex: 1 }}>
               Tasks are saved to your device when you click the add task button.
               You can access them anytime without internet.
             </Text>
@@ -244,25 +295,36 @@ export function AddTaskScreen({ navigation, route }: Props) {
         <View className="flex-row gap-3 my-16">
           <Pressable
             onPress={() => navigation.goBack()}
-            className="flex-1 py-3 rounded-xl border-2 border-brand-border bg-brand-white dark:bg-brandDark-surface"
+            className="flex-1 py-3 rounded-xl border-2"
+            style={{ borderColor, backgroundColor: surfaceBg }}
           >
-            <Text className="font-JakartaSemiBold text-center text-brand-textDark dark:text-brandDark-text">
+            <Text
+              style={{
+                textAlign: "center",
+                fontFamily: "Jakarta-SemiBold",
+                color: textPrimary,
+              }}
+            >
               Cancel
             </Text>
           </Pressable>
+
           <Pressable
             onPress={handleSaveTask}
             disabled={loading}
-            className={`flex-1 py-3 rounded-xl flex-row justify-center items-center gap-2 ${
-              loading ? "bg-brand-primaryLight" : "bg-brand-primary"
-            }`}
+            className="flex-1 py-3 rounded-xl flex-row justify-center items-center gap-2"
+            style={{
+              backgroundColor: loading
+                ? colors.brand.primaryLight
+                : colors.brand.primary,
+            }}
           >
             <MaterialIcons
               name={taskToEdit ? "check-circle" : "add-circle"}
               size={20}
               color="white"
             />
-            <Text className="font-JakartaSemiBold text-center text-brand-white">
+            <Text style={{ fontFamily: "Jakarta-SemiBold", color: "white" }}>
               {taskToEdit ? "Save Changes" : "Add Task"}
             </Text>
           </Pressable>
@@ -280,3 +342,8 @@ export function AddTaskScreen({ navigation, route }: Props) {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  heading: { fontFamily: "Jakarta-SemiBold", fontSize: 18 },
+  small: { fontFamily: "Jakarta", fontSize: 12 },
+});
