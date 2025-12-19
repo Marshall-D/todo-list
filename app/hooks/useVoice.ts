@@ -26,10 +26,6 @@ export type UseVoiceReturn = {
   setOperationModalVisible: (v: boolean) => void;
 };
 
-/**
- * useVoice - encapsulates all speech recognition logic & state
- * onRefresh should be provided (from useTasks) so hook can refresh UI after saving tasks
- */
 export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
   const MAX_RETRIES = 3;
 
@@ -42,8 +38,18 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
   }, [voiceModalVisible]);
 
   const [listening, setListening] = useState(false);
+
   const [interimText, setInterimText] = useState("");
+  const interimTextRef = useRef<string>(interimText);
+  useEffect(() => {
+    interimTextRef.current = interimText;
+  }, [interimText]);
+
   const [finalText, setFinalText] = useState("");
+  const finalTextRef = useRef<string>(finalText);
+  useEffect(() => {
+    finalTextRef.current = finalText;
+  }, [finalText]);
 
   const [operationModalVisible, setOperationModalVisible] = useState(false);
   const [operationModalTitle, setOperationModalTitle] = useState<
@@ -61,7 +67,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       const next = [`${ts} ${msg}`, ...prev].slice(0, 80);
       return next;
     });
-    // keep console.debug so devs can follow logs
     console.debug(msg);
   }, []);
 
@@ -75,7 +80,9 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
   // watchdog timer ref
   const watchdogRef = useRef<number | null>(null);
 
-  // Utilities moved from original component
+  // guard so we only process stopListening once per modal open
+  const processingRef = useRef(false);
+
   const dumpEvent = useCallback((ev: any) => {
     try {
       return JSON.stringify(
@@ -125,33 +132,103 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     );
   }, []);
 
+  // Modified extractor: prefer the single highest-confidence alternative across the event.
+  // Replace your existing extractTranscriptFromEvent with this version:
   const extractTranscriptFromEvent = useCallback(
     (ev: any): string | undefined => {
       if (!ev) return undefined;
+
+      // 1) Straight transcript field (simple cases)
       if (typeof ev.transcript === "string" && ev.transcript.trim()) {
         return ev.transcript.trim();
       }
+
+      // 2) Top-level alternatives array
       if (Array.isArray(ev.alternatives) && ev.alternatives.length > 0) {
         const best = chooseBestAlternative(ev.alternatives);
         if (best) return best.trim();
       }
+
+      // 3) results array: flatten alternatives across results
       if (Array.isArray(ev.results) && ev.results.length > 0) {
+        const flatAlts: { transcript: string; confidence: number | null }[] =
+          [];
+
+        for (const r of ev.results) {
+          if (!r) continue;
+
+          // If result contains an alternatives array, use those
+          if (Array.isArray(r.alternatives) && r.alternatives.length > 0) {
+            for (const a of r.alternatives) {
+              const txt = (a?.transcript ?? a?.text ?? "").trim();
+              const conf =
+                typeof a?.confidence === "number" ? a.confidence : null;
+              if (txt) flatAlts.push({ transcript: txt, confidence: conf });
+            }
+            continue;
+          }
+
+          // NEW: If the result has transcript + confidence at the result level (your logs show this),
+          // treat that as a single alternative with a numeric confidence.
+          if (typeof r.transcript === "string" && r.transcript.trim()) {
+            const txt = r.transcript.trim();
+            const conf = typeof r.confidence === "number" ? r.confidence : null;
+            flatAlts.push({ transcript: txt, confidence: conf });
+            continue;
+          }
+
+          // legacy fallback if result has other text fields
+          if (typeof r.text === "string" && r.text.trim()) {
+            flatAlts.push({ transcript: r.text.trim(), confidence: null });
+          }
+        }
+
+        // If there are numeric confidences, pick the single highest-confidence alt.
+        const numericConfs = flatAlts.filter(
+          (a) => typeof a.confidence === "number"
+        );
+        if (numericConfs.length > 0) {
+          // find max confidence
+          let maxConf = -Infinity;
+          for (const a of numericConfs) {
+            if ((a.confidence ?? -Infinity) > maxConf)
+              maxConf = a.confidence ?? -Infinity;
+          }
+          // candidates that match maxConf
+          const candidates = numericConfs.filter(
+            (a) => (a.confidence ?? -Infinity) === maxConf
+          );
+          // pick one candidate: if more than 1 (tie), pick random among them
+          const chosen =
+            candidates.length === 1
+              ? candidates[0]
+              : candidates[Math.floor(Math.random() * candidates.length)];
+          return chosen.transcript;
+        }
+
+        // No numeric confidences -> fallback: choose best alternative per result (one per result),
+        // but DO NOT join multiple variants from the same result. This preserves sequential segments.
         const parts: string[] = [];
         for (const r of ev.results) {
           if (!r) continue;
           if (Array.isArray(r.alternatives) && r.alternatives.length > 0) {
             const best = chooseBestAlternative(r.alternatives);
-            if (best) parts.push(String(best).trim());
+            if (best) parts.push(best.trim());
             continue;
           }
           if (typeof r.transcript === "string" && r.transcript.trim()) {
             parts.push(r.transcript.trim());
             continue;
           }
+          if (typeof r.text === "string" && r.text.trim()) {
+            parts.push(r.text.trim());
+          }
         }
         const collected = parts.join(" ").trim();
         if (collected) return collected;
       }
+
+      // 4) fallbacks
       if (typeof ev.text === "string" && ev.text.trim()) return ev.text.trim();
       if (typeof ev.value === "string" && ev.value.trim())
         return ev.value.trim();
@@ -160,36 +237,29 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     [chooseBestAlternative]
   );
 
+  // normalizer (aggressive but safe)
   const normalizeTranscript = useCallback((txt: string) => {
     if (!txt) return "";
     let s = txt.trim();
     s = s.replace(/\s+/g, " ");
+    s = s.replace(/\b(\w+)(?: \1\b)+/gi, "$1"); // remove adjacent duplicates
     const words = s.split(" ");
-    const dedupedWords: string[] = [];
-    for (let i = 0; i < words.length; i++) {
-      if (i > 0 && words[i].toLowerCase() === words[i - 1].toLowerCase()) {
-        continue;
-      }
-      dedupedWords.push(words[i]);
-    }
-    const phrases = dedupedWords;
     const cleaned: string[] = [];
     let i = 0;
-    while (i < phrases.length) {
-      const tryN = [3, 2];
+    while (i < words.length) {
       let consumed = false;
-      for (const n of tryN) {
-        if (i + n * 2 - 1 < phrases.length) {
-          const a = phrases
+      for (const n of [3, 2, 1]) {
+        if (i + n * 2 - 1 < words.length) {
+          const a = words
             .slice(i, i + n)
             .map((w) => w.toLowerCase())
             .join(" ");
-          const b = phrases
+          const b = words
             .slice(i + n, i + n * 2)
             .map((w) => w.toLowerCase())
             .join(" ");
           if (a === b) {
-            cleaned.push(...phrases.slice(i, i + n));
+            cleaned.push(...words.slice(i, i + n));
             i += n * 2;
             consumed = true;
             break;
@@ -197,7 +267,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         }
       }
       if (!consumed) {
-        cleaned.push(phrases[i]);
+        cleaned.push(words[i]);
         i += 1;
       }
     }
@@ -207,7 +277,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     return result;
   }, []);
 
-  // parser for transcription -> task titles
   const parseTranscriptionToTasks = useCallback((text: string): string[] => {
     if (!text || !text.trim()) return [];
     const splitter = /\s*(?:,|;|\band\b|\bthen\b|\bor\b|&)\s*/i;
@@ -227,6 +296,272 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     return parts;
   }, []);
 
+  // helper: decide if two titles are "similar" (word-overlap heuristic)
+  const areSimilar = useCallback((a: string, b: string) => {
+    const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
+    const wb = b.toLowerCase().split(/\s+/).filter(Boolean);
+    if (wa.length === 0 || wb.length === 0) return false;
+    const setA = new Set(wa);
+    let common = 0;
+    for (const w of wb) if (setA.has(w)) common++;
+    // measure against the shorter length to allow minor additions
+    const denom = Math.min(wa.length, wb.length);
+    return denom > 0 && common / denom >= 0.6; // 60% overlap => similar
+  }, []);
+
+  // ---- startListening ref indirection to avoid TS ordering issues ----
+  const startListeningRef = useRef<(() => Promise<void>) | null>(null);
+
+  // startWatchdog uses startListeningRef.current() when restarting
+  const startWatchdog = useCallback(
+    (timeoutMs = 20000) => {
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+      }
+      addDebugLog(`[watchdog] starting for ${timeoutMs}ms`);
+      watchdogRef.current = setTimeout(() => {
+        addDebugLog("[watchdog] triggered - stopping listening due to timeout");
+        try {
+          ExpoSpeechRecognitionModule.stop();
+        } catch (e) {
+          addDebugLog(`[watchdog stop error] ${String(e)}`);
+        }
+        setListening(false);
+
+        if (!finalTextRef.current && !interimTextRef.current) {
+          if (retryCountRef.current < MAX_RETRIES) {
+            const next = retryCountRef.current + 1;
+            setRetryCount(next);
+            addDebugLog(
+              `[watchdog retry] attempting restart ${next}/${MAX_RETRIES}`
+            );
+            setTimeout(() => {
+              if (!voiceModalVisibleRef.current) return;
+              if (startListeningRef.current) startListeningRef.current();
+            }, 400);
+          } else {
+            addDebugLog("[watchdog] exceeded retries, showing message");
+            setOperationModalTitle("No speech detected");
+            setOperationModalMsg(
+              "No speech was captured. Try again with a quieter environment or check microphone permissions."
+            );
+            setOperationModalVisible(true);
+          }
+        }
+        watchdogRef.current = null;
+      }, timeoutMs) as unknown as number;
+    },
+    [addDebugLog, MAX_RETRIES]
+  );
+
+  // start listening (permissions + start)
+  const startListening = useCallback(async () => {
+    addDebugLog("[action] startListening invoked");
+    try {
+      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      addDebugLog(`[permission result] ${dumpEvent(perm)}`);
+      if (!perm?.granted) {
+        setOperationModalTitle("Permission denied");
+        setOperationModalMsg(
+          "Please allow microphone / speech permissions in settings."
+        );
+        setOperationModalVisible(true);
+        addDebugLog("[permission] not granted");
+        return;
+      }
+
+      setRetryCount(0);
+      setFinalText("");
+      finalTextRef.current = "";
+      setInterimText("");
+      interimTextRef.current = "";
+      processingRef.current = false;
+      setListening(true);
+
+      ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+        continuous: true,
+      });
+
+      addDebugLog("[speech] started");
+      startWatchdog(18000);
+    } catch (err) {
+      addDebugLog(`[startListening error] ${String(err)}`);
+      console.error("[speech] startListening error", err);
+      setOperationModalTitle("Error");
+      setOperationModalMsg("Failed to start speech recognition.");
+      setOperationModalVisible(true);
+      setListening(false);
+    }
+  }, [addDebugLog, dumpEvent, startWatchdog]);
+
+  // publish to ref so watchdog can call it even though it's declared later
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
+
+  // stop listening and process finalText -> batch save
+  const stopListening = useCallback(async () => {
+    addDebugLog("[action] stopListening invoked");
+    if (processingRef.current) {
+      addDebugLog(
+        "[stopListening] already processing, ignoring duplicate call"
+      );
+      return;
+    }
+    processingRef.current = true;
+
+    try {
+      try {
+        await ExpoSpeechRecognitionModule.stop();
+        addDebugLog("[speech] stop() called");
+      } catch (err) {
+        addDebugLog(`[stop error] ${String(err)}`);
+        console.warn("[speech] stop error", err);
+      }
+
+      setListening(false);
+
+      // prefer finalText, fallback to interim
+      const transcript = (
+        finalTextRef.current ||
+        interimTextRef.current ||
+        ""
+      ).trim();
+      addDebugLog(`[collected transcript (pre-normalize)] "${transcript}"`);
+
+      // reset UI buffers
+      setInterimText("");
+      interimTextRef.current = "";
+      setFinalText("");
+      finalTextRef.current = "";
+
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+        addDebugLog("[watchdog] cleared on stop");
+      }
+
+      setVoiceModalVisible(false);
+      setFabOptionsVisible(false);
+
+      if (!transcript) {
+        setOperationModalTitle("No speech detected");
+        setOperationModalMsg("We didn't catch anything — try again.");
+        setOperationModalVisible(true);
+        processingRef.current = false;
+        return;
+      }
+
+      const normalized = normalizeTranscript(transcript);
+      addDebugLog(`[collected transcript (normalized)] "${normalized}"`);
+
+      let titlesRaw = parseTranscriptionToTasks(normalized);
+      addDebugLog(
+        `[parseTranscriptionToTasks] returned ${titlesRaw.length} part(s)`
+      );
+
+      // Determine if user actually used splitters (commas, 'and', 'then', 'or', '&')
+      const hadSplitter = /,|;|\band\b|\bthen\b|\bor\b|&/i.test(normalized);
+
+      // If parser returned multiple parts but there was NO splitter token in the normalized transcript,
+      // this likely means the recognizer returned multiple variant sentences — collapse to ONE.
+      if (titlesRaw.length > 1 && !hadSplitter) {
+        addDebugLog(
+          "[collapse] multiple parts found but no splitter token - collapsing to single best part"
+        );
+        // pick the longest part (most complete) as representative
+        let longest = titlesRaw[0];
+        for (const t of titlesRaw) {
+          if (t.length > longest.length) longest = t;
+        }
+        titlesRaw = [longest];
+      }
+
+      // Now dedupe near-duplicates (word-overlap heuristic) and filter tiny entries
+      const seenLower = new Set<string>();
+      const finalCandidates: string[] = [];
+      for (const t of titlesRaw.map((s) => s.trim()).filter(Boolean)) {
+        if (t.length <= 1) continue;
+        const lower = t.toLowerCase();
+        let skip = false;
+        for (const kept of finalCandidates) {
+          if (areSimilar(kept, t)) {
+            // keep longer of the two
+            if (t.length > kept.length) {
+              // replace kept with t
+              const idx = finalCandidates.indexOf(kept);
+              finalCandidates.splice(idx, 1, t);
+            }
+            skip = true;
+            break;
+          }
+        }
+        if (!skip && !seenLower.has(lower)) {
+          finalCandidates.push(t);
+          seenLower.add(lower);
+        }
+      }
+
+      // If there are still multiple finalCandidates but there was no splitter, collapse again to 1:
+      if (finalCandidates.length > 1 && !hadSplitter) {
+        addDebugLog(
+          "[collapse-after-dedupe] still multiple candidates without splitter => collapse to single longest"
+        );
+        let longest = finalCandidates[0];
+        for (const t of finalCandidates)
+          if (t.length > longest.length) longest = t;
+        finalCandidates.splice(0, finalCandidates.length, longest);
+      }
+
+      if (finalCandidates.length === 0) {
+        setOperationModalTitle("No tasks found");
+        setOperationModalMsg("Could not parse tasks from speech.");
+        setOperationModalVisible(true);
+        processingRef.current = false;
+        return;
+      }
+
+      // batch save
+      try {
+        const stored = (await getStoredTasks()) || [];
+        const now = Date.now();
+        const newTasks: Task[] = finalCandidates.map((title, i) => ({
+          id: (now + i).toString(),
+          title,
+          description: undefined,
+          completed: false,
+          createdAt: now + i,
+        }));
+        const updated = [...newTasks, ...stored];
+        await saveTasks(updated);
+        addDebugLog(`[batch save] saved ${newTasks.length} task(s)`);
+        await onRefresh();
+        setOperationModalTitle("Added tasks");
+        setOperationModalMsg(
+          `Added ${newTasks.length} task${newTasks.length > 1 ? "s" : ""}.`
+        );
+        setOperationModalVisible(true);
+        addDebugLog(`[tasks added] ${newTasks.length}`);
+      } catch (err) {
+        addDebugLog(`[adding tasks error] ${String(err)}`);
+        console.error("[speech] adding tasks error", err);
+        setOperationModalTitle("Error");
+        setOperationModalMsg("Failed to save tasks.");
+        setOperationModalVisible(true);
+      }
+    } finally {
+      processingRef.current = false;
+    }
+  }, [
+    normalizeTranscript,
+    parseTranscriptionToTasks,
+    onRefresh,
+    addDebugLog,
+    areSimilar,
+  ]);
+
   // event handlers using expo hooks
   useSpeechRecognitionEvent("interim", (event) => {
     addDebugLog(`[event interim] ${dumpEvent(event)}`);
@@ -234,43 +569,33 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     if (t) {
       addDebugLog(`[interim extracted] "${t}"`);
       setInterimText(t);
+      interimTextRef.current = t;
     } else {
       setInterimText(event.transcript ?? "");
+      interimTextRef.current = event.transcript ?? "";
     }
   });
 
   useSpeechRecognitionEvent("result", (event) => {
     addDebugLog(`[event result] ${dumpEvent(event)}`);
     const t = extractTranscriptFromEvent(event);
-    const prev = finalText;
     if (t) {
       addDebugLog(`[result extracted] "${t}"`);
-      let updated = "";
-      if (!prev) {
-        updated = t;
-      } else if (t.startsWith(prev)) {
-        updated = t;
-      } else if (prev.endsWith(t)) {
-        updated = prev;
-      } else {
-        updated = `${prev} ${t}`;
-      }
-      const normalized = normalizeTranscript(updated);
+      const normalized = normalizeTranscript(t);
       addDebugLog(`[result normalized] "${normalized}"`);
       setFinalText(normalized);
+      finalTextRef.current = normalized;
     } else if (typeof event.transcript === "string") {
       const t2 = event.transcript.trim();
-      let updated = "";
-      if (!prev) updated = t2;
-      else if (t2.startsWith(prev)) updated = t2;
-      else updated = `${prev} ${t2}`;
-      const normalized = normalizeTranscript(updated);
+      const normalized = normalizeTranscript(t2);
       addDebugLog(`[result fallback normalized] "${normalized}"`);
       setFinalText(normalized);
+      finalTextRef.current = normalized;
     } else {
       addDebugLog("[result] no transcript found in event");
     }
     setInterimText("");
+    interimTextRef.current = "";
     if (watchdogRef.current) {
       clearTimeout(watchdogRef.current);
       watchdogRef.current = null;
@@ -313,7 +638,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         }
         setTimeout(() => {
           if (!voiceModalVisibleRef.current) return;
-          startListening();
+          if (startListeningRef.current) startListeningRef.current();
         }, 400);
         return;
       }
@@ -344,174 +669,14 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     setOperationModalVisible(true);
   });
 
-  const startWatchdog = useCallback(
-    (timeoutMs = 20000) => {
-      if (watchdogRef.current) {
-        clearTimeout(watchdogRef.current);
-      }
-      addDebugLog(`[watchdog] starting for ${timeoutMs}ms`);
-      watchdogRef.current = setTimeout(() => {
-        addDebugLog("[watchdog] triggered - stopping listening due to timeout");
-        try {
-          ExpoSpeechRecognitionModule.stop();
-        } catch (e) {
-          addDebugLog(`[watchdog stop error] ${String(e)}`);
-        }
-        setListening(false);
-        if (!finalText && !interimText) {
-          if (retryCountRef.current < MAX_RETRIES) {
-            const next = retryCountRef.current + 1;
-            setRetryCount(next);
-            addDebugLog(
-              `[watchdog retry] attempting restart ${next}/${MAX_RETRIES}`
-            );
-            setTimeout(() => {
-              if (!voiceModalVisibleRef.current) return;
-              startListening();
-            }, 400);
-          } else {
-            addDebugLog("[watchdog] exceeded retries, showing message");
-            setOperationModalTitle("No speech detected");
-            setOperationModalMsg(
-              "No speech was captured. Try again with a quieter environment or check microphone permissions."
-            );
-            setOperationModalVisible(true);
-          }
-        }
-        watchdogRef.current = null;
-      }, timeoutMs) as unknown as number;
-    },
-    [addDebugLog, finalText, interimText]
-  );
-
-  // start listening (permissions + start)
-  const startListening = useCallback(async () => {
-    addDebugLog("[action] startListening invoked");
-    try {
-      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      addDebugLog(`[permission result] ${dumpEvent(perm)}`);
-      if (!perm?.granted) {
-        setOperationModalTitle("Permission denied");
-        setOperationModalMsg(
-          "Please allow microphone / speech permissions in settings."
-        );
-        setOperationModalVisible(true);
-        addDebugLog("[permission] not granted");
-        return;
-      }
-
-      setRetryCount(0);
-      setFinalText("");
-      setInterimText("");
-      setListening(true);
-
-      ExpoSpeechRecognitionModule.start({
-        lang: "en-US",
-        interimResults: true,
-        continuous: true,
-      });
-
-      addDebugLog("[speech] started");
-      startWatchdog(18000);
-    } catch (err) {
-      addDebugLog(`[startListening error] ${String(err)}`);
-      console.error("[speech] startListening error", err);
-      setOperationModalTitle("Error");
-      setOperationModalMsg("Failed to start speech recognition.");
-      setOperationModalVisible(true);
-      setListening(false);
-    }
-  }, [addDebugLog, dumpEvent, startWatchdog]);
-
-  // stop listening and process finalText -> batch save
-  const stopListening = useCallback(async () => {
-    addDebugLog("[action] stopListening invoked");
-    try {
-      await ExpoSpeechRecognitionModule.stop();
-      addDebugLog("[speech] stop() called");
-    } catch (err) {
-      addDebugLog(`[stop error] ${String(err)}`);
-      console.warn("[speech] stop error", err);
-    } finally {
-      setListening(false);
-      const transcript = (finalText || interimText || "").trim();
-      addDebugLog(`[collected transcript (pre-normalize)] "${transcript}"`);
-
-      setInterimText("");
-      setFinalText("");
-
-      if (watchdogRef.current) {
-        clearTimeout(watchdogRef.current);
-        watchdogRef.current = null;
-        addDebugLog("[watchdog] cleared on stop");
-      }
-
-      setVoiceModalVisible(false);
-      setFabOptionsVisible(false);
-
-      if (!transcript) {
-        setOperationModalTitle("No speech detected");
-        setOperationModalMsg("We didn't catch anything — try again.");
-        setOperationModalVisible(true);
-        return;
-      }
-
-      const normalized = normalizeTranscript(transcript);
-      addDebugLog(`[collected transcript (normalized)] "${normalized}"`);
-
-      const titles = parseTranscriptionToTasks(normalized);
-      if (titles.length === 0) {
-        setOperationModalTitle("No tasks found");
-        setOperationModalMsg("Could not parse tasks from speech.");
-        setOperationModalVisible(true);
-        return;
-      }
-
-      // batch save
-      try {
-        const stored = (await getStoredTasks()) || [];
-        const now = Date.now();
-        const newTasks: Task[] = titles.map((title, i) => ({
-          id: (now + i).toString(),
-          title,
-          description: undefined,
-          completed: false,
-          createdAt: now + i,
-        }));
-        const updated = [...newTasks, ...stored];
-        await saveTasks(updated);
-        addDebugLog(`[batch save] saved ${newTasks.length} tasks`);
-        // reload UI via provided callback
-        await onRefresh();
-        setOperationModalTitle("Added tasks");
-        setOperationModalMsg(
-          `Added ${newTasks.length} task${newTasks.length > 1 ? "s" : ""}.`
-        );
-        setOperationModalVisible(true);
-        addDebugLog(`[tasks added] ${newTasks.length}`);
-      } catch (err) {
-        addDebugLog(`[adding tasks error] ${String(err)}`);
-        console.error("[speech] adding tasks error", err);
-        setOperationModalTitle("Error");
-        setOperationModalMsg("Failed to save tasks.");
-        setOperationModalVisible(true);
-      }
-    }
-  }, [
-    finalText,
-    interimText,
-    normalizeTranscript,
-    parseTranscriptionToTasks,
-    onRefresh,
-  ]);
-
-  // auto-start when voice modal opens
+  // auto-start when voice modal opens; ensure we don't double-start
   useEffect(() => {
     if (voiceModalVisible) {
       setRetryCount(0);
       addDebugLog("[voice modal] opened - will auto-start listening shortly");
       const t = setTimeout(() => {
-        if (!listening) startListening();
+        if (!listening && startListeningRef.current)
+          startListeningRef.current();
       }, 150);
       return () => clearTimeout(t);
     } else {
@@ -523,7 +688,10 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       }
       setListening(false);
       setInterimText("");
+      interimTextRef.current = "";
       setFinalText("");
+      finalTextRef.current = "";
+      processingRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceModalVisible]);
