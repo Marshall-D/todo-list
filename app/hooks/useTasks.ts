@@ -13,7 +13,6 @@ export function useTasks() {
   const [filter, setFilter] = useState<FilterMode>("all");
   const [sortMode, setSortMode] = useState<SortMode>("created");
 
-  // --- new: search state ---
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const loadTasks = useCallback(async () => {
@@ -71,7 +70,6 @@ export function useTasks() {
   );
 
   // filter -> search -> sort order:
-  // Start from tasks -> apply search (title|description) -> apply active/completed filter -> apply sorting
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
 
@@ -128,8 +126,8 @@ export function useTasks() {
     setFilter,
     sortMode,
     setSortMode,
-    searchQuery, // new
-    setSearchQuery, // new
+    searchQuery,
+    setSearchQuery,
     loadTasks,
     onRefresh,
     deleteTask,

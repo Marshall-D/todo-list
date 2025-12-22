@@ -101,7 +101,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
       ? colors.brandDark.textMuted
       : colors.brand.placeholder
     : overdue
-      ? "#EF4444" // red-500
+      ? "#EF4444"
       : resolved === "dark"
         ? colors.brandDark.textMuted
         : colors.brand.textGray;

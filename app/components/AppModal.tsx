@@ -100,7 +100,6 @@ export default function AppModal({
         ? "alert-circle"
         : "information-circle";
 
-  // theme colors (from your tokens)
   const bgSurface =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
   const textPrimary =
