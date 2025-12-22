@@ -1,4 +1,5 @@
 // App.tsx
+
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -6,6 +7,14 @@ import { TaskListScreen } from "./app/screens/TaskListScreen";
 import { AddTaskScreen } from "./app/screens/AddTaskScreen";
 import { ThemeProvider, useTheme } from "./app/providers/ThemeProvider";
 import colors from "./app/utils/themes/colors";
+
+/**
+ * App.tsx - top-level app container
+ *
+ * - Defines Task type and navigation param types used across the app.
+ * - Wraps the navigator in ThemeProvider so all screens can access theme context.
+ * - ThemedNavigator uses useTheme() to apply header/content styling based on the resolved theme.
+ */
 
 export interface Task {
   id: string;
@@ -23,10 +32,14 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+/**
+ * ThemedNavigator - separate function using useTheme so hooks can be used inside.
+ * Applies consistent header and content styles according to the resolved theme.
+ */
 function ThemedNavigator() {
   const { resolved } = useTheme();
 
-  // set header / content background based on resolved theme
+  // theme-aware header/background colors
   const headerBg =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
   const headerTint =
@@ -77,6 +90,10 @@ function ThemedNavigator() {
   );
 }
 
+/**
+ * RootLayout - top-level app entrypoint.
+ * ThemeProvider must wrap the navigator so the entire UI has theme tokens available.
+ */
 export default function RootLayout() {
   return (
     <ThemeProvider>

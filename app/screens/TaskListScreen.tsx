@@ -1,5 +1,4 @@
 // app/screens/TaskListScreen.tsx
-
 "use client";
 import React, { useCallback, useRef, useEffect } from "react";
 import {
@@ -26,6 +25,12 @@ import colors from "../utils/themes/colors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TaskList">;
 
+/**
+ * TaskListScreen (container)
+ *
+ * - Loads tasks via useTasks and provides navigation handlers.
+ * - Passes voice hook and task handlers to TaskListView (presentational).
+ */
 export function TaskListScreen({ navigation }: Props) {
   const {
     tasks,
@@ -46,9 +51,11 @@ export function TaskListScreen({ navigation }: Props) {
     activeCount,
   } = useTasks();
 
+  // voice hook manages the entire voice → task flow.
   const voice = useVoice(onRefresh);
   const { resolved, setMode } = useTheme();
 
+  // header action to toggle theme (keeps header rendering stable)
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -73,6 +80,7 @@ export function TaskListScreen({ navigation }: Props) {
     });
   }, [navigation, resolved, setMode]);
 
+  // reload tasks whenever screen focuses
   useFocusEffect(
     useCallback(() => {
       loadTasks();
@@ -107,8 +115,13 @@ export function TaskListScreen({ navigation }: Props) {
   );
 }
 
-/* ---------- Presentational view (pure UI) ---------- */
+/* ---------- Presentational view (pure UI) - TaskListView ---------- */
 
+/**
+ * Props:
+ * - receives all data + handlers from the container above. This separation keeps TaskListScreen
+ *   easily testable (logic in container) and the UI focused on rendering.
+ */
 type TaskListViewProps = {
   loading: boolean;
   tasks: Task[];
@@ -150,10 +163,12 @@ function TaskListView({
   searchQuery,
   setSearchQuery,
 }: TaskListViewProps) {
+  // small entrance animations for FAB and Voice modal
   const fabFadeValue = useRef(new Animated.Value(0)).current;
   const voiceFadeValue = useRef(new Animated.Value(0)).current;
   const { resolved } = useTheme();
 
+  // show/hide FAB options animation
   useEffect(() => {
     if (voice.fabOptionsVisible) {
       Animated.timing(fabFadeValue, {
@@ -166,6 +181,7 @@ function TaskListView({
     }
   }, [voice.fabOptionsVisible, fabFadeValue]);
 
+  // show/hide voice modal animation
   useEffect(() => {
     if (voice.voiceModalVisible) {
       Animated.timing(voiceFadeValue, {
@@ -178,6 +194,7 @@ function TaskListView({
     }
   }, [voice.voiceModalVisible, voiceFadeValue]);
 
+  // loading placeholder
   if (loading) {
     return (
       <View
@@ -194,11 +211,12 @@ function TaskListView({
     );
   }
 
+  // theme-based color helpers
   const rootBg = resolved === "dark" ? colors.brand.black : colors.brand.white;
   const contentSurface =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
 
-  // card backgrounds: in light mode they use brand-primaryLight / brand-success / brand-yellow
+  // card backgrounds for header stats (adapts with theme)
   const card1Bg =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.primaryLight;
   const card2Bg =
@@ -416,6 +434,7 @@ function TaskListView({
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
+          // IMPORTANT: paddingBottom ensures the last item isn't hidden by system navigation
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -540,6 +559,7 @@ function TaskListView({
       </Modal>
 
       {/* Voice Modal (simplified: only title + subtitle visible) */}
+      {/* User must press Start to begin recording (start is explicit) */}
       <Modal
         visible={voice.voiceModalVisible}
         transparent
@@ -592,7 +612,7 @@ function TaskListView({
               say.
             </Text>
 
-            {/* Controls: Start / Stop / Cancel */}
+            {/* Controls: Start / Stop / Cancel (explicit start required) */}
             <View style={{ width: "100%", flexDirection: "row", gap: 12 }}>
               {!voice.listening ? (
                 <Pressable
@@ -662,7 +682,7 @@ function TaskListView({
         </View>
       </Modal>
 
-      {/* operation result modal */}
+      {/* operation result modal (shows feedback like "Added tasks" or errors) */}
       <AppModal
         visible={voice.operationModalVisible}
         type="info"

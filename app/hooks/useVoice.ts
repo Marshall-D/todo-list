@@ -1,4 +1,5 @@
 // app/hooks/useVoice.ts
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ExpoSpeechRecognitionModule,
@@ -7,6 +8,20 @@ import {
 import { getStoredTasks, saveTasks } from "../utils/taskStorage";
 import type { Task } from "../../App";
 
+/**
+ * useVoice - voice-to-task hook using device speech recognition (expo-speech-recognition).
+ *
+ * Goals & behavior:
+ * - Provide an accessible Start / Stop flow so users explicitly start recording.
+ * - Capture intermediate and final results produced by the native recognizer and prefer the most confident alternative.
+ * - Normalize and split final transcription into individual tasks (splitters like commas/and/then/or).
+ * - Preserve earlier captured segments for long recordings by preferring finalTextRef and falling back to interimTextRef.
+ * - Retry logic / watchdog to handle recognizer timeouts and no-speech events.
+ *
+ * Notes:
+ * - The native event typings are conservative; we cast event args to `any` where we rely on fields (transcript, alternatives, results).
+ * - This hook persists tasks via getStoredTasks/saveTasks and triggers onRefresh after saving.
+ */
 export type UseVoiceReturn = {
   fabOptionsVisible: boolean;
   setFabOptionsVisible: (v: boolean) => void;
@@ -26,30 +41,37 @@ export type UseVoiceReturn = {
 };
 
 export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
+  // maximum retries when no-speech / watchdog triggers
   const MAX_RETRIES = 3;
 
+  // UI state for the FAB options modal
   const [fabOptionsVisible, setFabOptionsVisible] = useState(false);
 
+  // voice modal (where Start / Stop is shown)
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const voiceModalVisibleRef = useRef<boolean>(voiceModalVisible);
   useEffect(() => {
     voiceModalVisibleRef.current = voiceModalVisible;
   }, [voiceModalVisible]);
 
+  // whether the recognizer is currently listening
   const [listening, setListening] = useState(false);
 
+  // interimText: immediate partial results from the recognizer (frequent updates)
   const [interimText, setInterimText] = useState("");
   const interimTextRef = useRef<string>(interimText);
   useEffect(() => {
     interimTextRef.current = interimText;
   }, [interimText]);
 
+  // finalText: more stable "result" updates from the recognizer
   const [finalText, setFinalText] = useState("");
   const finalTextRef = useRef<string>(finalText);
   useEffect(() => {
     finalTextRef.current = finalText;
   }, [finalText]);
 
+  // operation modal (for errors / notices)
   const [operationModalVisible, setOperationModalVisible] = useState(false);
   const [operationModalTitle, setOperationModalTitle] = useState<
     string | undefined
@@ -58,19 +80,26 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     string | undefined
   >(undefined);
 
-  // retry counter
+  // retry counter (exposed so UI can show attempts if desired)
   const [retryCount, setRetryCount] = useState(0);
   const retryCountRef = useRef<number>(retryCount);
   useEffect(() => {
     retryCountRef.current = retryCount;
   }, [retryCount]);
 
-  // watchdog timer ref
+  // watchdog timer ref - stops listening after a timeout and optionally restarts
   const watchdogRef = useRef<number | null>(null);
 
-  // guard so we only process stopListening once per modal open
+  // guard to ensure stopListening's processing runs only once at a time
   const processingRef = useRef(false);
 
+  /**
+   * chooseBestAlternative - helper that picks the alternative with the highest numeric confidence
+   * if confidences exist; otherwise pick a random alternative as a fallback.
+   *
+   * Reason: some recognizers produce multiple alternatives with confidence scores; preferring the
+   * highest-confidence choice reduces noisy outputs.
+   */
   const chooseBestAlternative = useCallback((alternatives: any[]) => {
     if (!Array.isArray(alternatives) || alternatives.length === 0)
       return undefined;
@@ -105,23 +134,32 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     );
   }, []);
 
-  // Modified extractor: prefer the single highest-confidence alternative across the event.
+  /**
+   * extractTranscriptFromEvent - robust extractor that reads the most plausible text string
+   * out of a variety of shapes the native recognizer might emit (transcript, alternatives, results, text).
+   *
+   * - Prefers single highest-confidence alternative if present.
+   * - If results is present with multiple sub-results, collects one best alternative per result to preserve order.
+   * - Returns `undefined` when no usable text is present.
+   *
+   * Accepts `any` shaped event because the library typings don't expose the full runtime shape.
+   */
   const extractTranscriptFromEvent = useCallback(
     (ev: any): string | undefined => {
       if (!ev) return undefined;
 
-      // 1) Straight transcript field (simple cases)
+      // 1) direct transcript field (very common)
       if (typeof ev.transcript === "string" && ev.transcript.trim()) {
         return ev.transcript.trim();
       }
 
-      // 2) Top-level alternatives array
+      // 2) top-level alternatives array
       if (Array.isArray(ev.alternatives) && ev.alternatives.length > 0) {
         const best = chooseBestAlternative(ev.alternatives);
         if (best) return best.trim();
       }
 
-      // 3) results array: flatten alternatives across results
+      // 3) results array (some recognizers provide a results[] with alternatives inside)
       if (Array.isArray(ev.results) && ev.results.length > 0) {
         const flatAlts: { transcript: string; confidence: number | null }[] =
           [];
@@ -129,7 +167,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         for (const r of ev.results) {
           if (!r) continue;
 
-          // If result contains an alternatives array, use those
+          // Use alternatives[] when available (preferred)
           if (Array.isArray(r.alternatives) && r.alternatives.length > 0) {
             for (const a of r.alternatives) {
               const txt = (a?.transcript ?? a?.text ?? "").trim();
@@ -140,8 +178,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
             continue;
           }
 
-          // If the result has transcript + confidence at the result level,
-          // treat that as a single alternative with a numeric confidence.
+          // Some results have transcript + confidence at top level
           if (typeof r.transcript === "string" && r.transcript.trim()) {
             const txt = r.transcript.trim();
             const conf = typeof r.confidence === "number" ? r.confidence : null;
@@ -149,28 +186,25 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
             continue;
           }
 
-          // legacy fallback if result has other text fields
+          // legacy fallback for other text fields
           if (typeof r.text === "string" && r.text.trim()) {
             flatAlts.push({ transcript: r.text.trim(), confidence: null });
           }
         }
 
-        // If there are numeric confidences, pick the single highest-confidence alt.
+        // If numeric confidences exist, pick the single alt with the highest confidence
         const numericConfs = flatAlts.filter(
           (a) => typeof a.confidence === "number"
         );
         if (numericConfs.length > 0) {
-          // find max confidence
           let maxConf = -Infinity;
           for (const a of numericConfs) {
             if ((a.confidence ?? -Infinity) > maxConf)
               maxConf = a.confidence ?? -Infinity;
           }
-          // candidates that match maxConf
           const candidates = numericConfs.filter(
             (a) => (a.confidence ?? -Infinity) === maxConf
           );
-          // pick one candidate: if more than 1 (tie), pick random among them
           const chosen =
             candidates.length === 1
               ? candidates[0]
@@ -178,8 +212,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
           return chosen.transcript;
         }
 
-        // No numeric confidences -> fallback: choose best alternative per result (one per result),
-        // but DO NOT join multiple variants from the same result. This preserves sequential segments.
+        // No numeric confidences: build sequential parts, taking one best alternative per result.
         const parts: string[] = [];
         for (const r of ev.results) {
           if (!r) continue;
@@ -209,17 +242,25 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     [chooseBestAlternative]
   );
 
-  // normalizer (aggressive but safe)
+  /**
+   * normalizeTranscript - lightweight post-processing to:
+   * - collapse duplicate words produced by noisy recognizers,
+   * - trim excessive whitespace,
+   * - remove spaces before punctuation.
+   *
+   * This is intentionally conservative: we avoid heavy rewriting to not accidentally change user intent.
+   */
   const normalizeTranscript = useCallback((txt: string) => {
     if (!txt) return "";
     let s = txt.trim();
     s = s.replace(/\s+/g, " ");
-    s = s.replace(/\b(\w+)(?: \1\b)+/gi, "$1"); // remove adjacent duplicates
+    s = s.replace(/\b(\w+)(?: \1\b)+/gi, "$1"); // remove adjacent duplicates like "to to to"
     const words = s.split(" ");
     const cleaned: string[] = [];
     let i = 0;
     while (i < words.length) {
       let consumed = false;
+      // detect repeated n-gram patterns and collapse them (e.g., "buy milk buy milk")
       for (const n of [3, 2, 1]) {
         if (i + n * 2 - 1 < words.length) {
           const a = words
@@ -249,6 +290,15 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     return result;
   }, []);
 
+  /**
+   * parseTranscriptionToTasks - split a final transcription into likely task titles.
+   *
+   * - Splits on common delimiters: commas, semicolons, "and", "then", "or", ampersand.
+   * - If only one part is detected but it contains 'and' inside, a fallback split is attempted.
+   *
+   * This is intentionally heuristic — the task of deciding what constitutes separate actionable tasks
+   * from free speech is subjective, so keep these rules simple and predictable.
+   */
   const parseTranscriptionToTasks = useCallback((text: string): string[] => {
     if (!text || !text.trim()) return [];
     const splitter = /\s*(?:,|;|\band\b|\bthen\b|\bor\b|&)\s*/i;
@@ -268,7 +318,10 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     return parts;
   }, []);
 
-  // helper: decide if two titles are "similar" (word-overlap heuristic)
+  /**
+   * areSimilar - cheap heuristic to dedupe very similar task titles.
+   * Uses word-overlap normalized to the shorter title length.
+   */
   const areSimilar = useCallback((a: string, b: string) => {
     const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
     const wb = b.toLowerCase().split(/\s+/).filter(Boolean);
@@ -276,14 +329,21 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     const setA = new Set(wa);
     let common = 0;
     for (const w of wb) if (setA.has(w)) common++;
-    // measure against the shorter length to allow minor additions
     const denom = Math.min(wa.length, wb.length);
     return denom > 0 && common / denom >= 0.6; // 60% overlap => similar
   }, []);
 
+  // Reference for calling startListening from watchdog retries
   const startListeningRef = useRef<(() => Promise<void>) | null>(null);
 
-  // startWatchdog uses startListeningRef.current() when restarting
+  /**
+   * startWatchdog - when listening, schedule a timer that will stop the recognizer if no results arrive.
+   *
+   * - If no interim/final text is produced, it will attempt restarts up to MAX_RETRIES.
+   * - After retries exhausted, show an operation modal indicating no speech was detected.
+   *
+   * The default timeout is set to 20s but you can tweak as necessary if recognizer behaves differently on some devices.
+   */
   const startWatchdog = useCallback(
     (timeoutMs = 20000) => {
       if (watchdogRef.current) {
@@ -293,10 +353,11 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         try {
           ExpoSpeechRecognitionModule.stop();
         } catch (e) {
-          // ignore
+          // ignore stop errors
         }
         setListening(false);
 
+        // If we have not collected any interim or final text, attempt restart logic
         if (!finalTextRef.current && !interimTextRef.current) {
           if (retryCountRef.current < MAX_RETRIES) {
             const next = retryCountRef.current + 1;
@@ -319,7 +380,12 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     [MAX_RETRIES]
   );
 
-  // start listening (permissions + start)
+  /**
+   * startListening - request permissions and start the native recognizer.
+   *
+   * - Resets retry/final/interim buffers so each recording starts clean.
+   * - Sets listening=true and starts the watchdog.
+   */
   const startListening = useCallback(async () => {
     try {
       const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -356,15 +422,24 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
   }, [startWatchdog]);
 
-  // publish to ref so watchdog can call it even though it's declared later
+  // publish startListening to a ref so watchdog retries can call it
   useEffect(() => {
     startListeningRef.current = startListening;
   }, [startListening]);
 
-  // stop listening and process finalText -> batch save
+  /**
+   * stopListening - called when user taps Stop (or when app wants to finalize recognition).
+   *
+   * Process:
+   * 1) stop the native recognizer (best-effort).
+   * 2) prefer finalTextRef over interimTextRef to preserve earlier captured segments.
+   * 3) normalize -> split into candidate task titles.
+   * 4) dedupe and collapse heuristically to produce finalCandidates.
+   * 5) persist tasks and trigger onRefresh.
+   */
   const stopListening = useCallback(async () => {
     if (processingRef.current) {
-      return;
+      return; // prevent duplicate processing
     }
     processingRef.current = true;
 
@@ -377,14 +452,14 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
 
       setListening(false);
 
-      // prefer finalText, fallback to interim
+      // prefer finalText, fallback to interim (this preserves earlier captures when OS overwrites)
       const transcript = (
         finalTextRef.current ||
         interimTextRef.current ||
         ""
       ).trim();
 
-      // reset UI buffers
+      // clear UI buffers
       setInterimText("");
       interimTextRef.current = "";
       setFinalText("");
@@ -395,6 +470,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         watchdogRef.current = null;
       }
 
+      // close voice UI
       setVoiceModalVisible(false);
       setFabOptionsVisible(false);
 
@@ -406,17 +482,16 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         return;
       }
 
+      // normalize and split transcription into parts
       const normalized = normalizeTranscript(transcript);
-
       let titlesRaw = parseTranscriptionToTasks(normalized);
 
-      // Determine if user actually used splitters (commas, 'and', 'then', 'or', '&')
+      // If user actually provided splitters, we can keep multiple parts.
+      // But if multiple parts returned with NO splitter token, collapse — often recognizer returns variants.
       const hadSplitter = /,|;|\band\b|\bthen\b|\bor\b|&/i.test(normalized);
 
-      // If parser returned multiple parts but there was NO splitter token in the normalized transcript,
-      // this likely means the recognizer returned multiple variant sentences — collapse to ONE.
       if (titlesRaw.length > 1 && !hadSplitter) {
-        // pick the longest part (most complete) as representative
+        // pick the longest part (assume most complete)
         let longest = titlesRaw[0];
         for (const t of titlesRaw) {
           if (t.length > longest.length) longest = t;
@@ -424,7 +499,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         titlesRaw = [longest];
       }
 
-      // Now dedupe near-duplicates (word-overlap heuristic) and filter tiny entries
+      // Dedupe near-duplicates using areSimilar heuristic and filter tiny entries.
       const seenLower = new Set<string>();
       const finalCandidates: string[] = [];
       for (const t of titlesRaw.map((s) => s.trim()).filter(Boolean)) {
@@ -433,9 +508,8 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         let skip = false;
         for (const kept of finalCandidates) {
           if (areSimilar(kept, t)) {
-            // keep longer of the two
+            // keep the longer title if similar
             if (t.length > kept.length) {
-              // replace kept with t
               const idx = finalCandidates.indexOf(kept);
               finalCandidates.splice(idx, 1, t);
             }
@@ -449,7 +523,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         }
       }
 
-      // If there are still multiple finalCandidates but there was no splitter, collapse again to 1:
+      // If still multiple candidates but no splitter found, collapse to one (avoid duplicates)
       if (finalCandidates.length > 1 && !hadSplitter) {
         let longest = finalCandidates[0];
         for (const t of finalCandidates)
@@ -465,7 +539,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         return;
       }
 
-      // batch save
+      // Persist tasks in a batch and refresh UI
       try {
         const stored = (await getStoredTasks()) || [];
         const now = Date.now();
@@ -495,7 +569,12 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
   }, [normalizeTranscript, parseTranscriptionToTasks, onRefresh, areSimilar]);
 
-  // event handlers using expo hooks
+  // === Event handlers ===
+  // Note: useSpeechRecognitionEvent's TypeScript signature may not include these string keys.
+  // We cast the event name to any and the handler event param to any because runtime events
+  // include fields like `transcript`, `alternatives`, `results` that the typings don't expose.
+
+  // Interim results - often fast partial transcripts, update UI so the user sees feedback.
   useSpeechRecognitionEvent("interim" as any, (event: any) => {
     const t = extractTranscriptFromEvent(event);
     if (t) {
@@ -507,6 +586,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
   });
 
+  // Result events - more stable segments. We normalize and store into finalTextRef.
   useSpeechRecognitionEvent("result" as any, (event: any) => {
     const t = extractTranscriptFromEvent(event);
     if (t) {
@@ -519,6 +599,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       setFinalText(normalized);
       finalTextRef.current = normalized;
     }
+    // reset interim after a result arrives (we now have a stable piece)
     setInterimText("");
     interimTextRef.current = "";
     if (watchdogRef.current) {
@@ -527,6 +608,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
   });
 
+  // Error events from native recognizer. We handle no-speech and network separately.
   useSpeechRecognitionEvent("error" as any, (ev: any) => {
     console.warn("[speech error]", ev);
 
@@ -549,6 +631,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       (typeof message === "string" &&
         message.toLowerCase().includes("network"));
 
+    // retry on no-speech up to MAX_RETRIES, else show modal
     if (isNoSpeech && voiceModalVisibleRef.current) {
       if (retryCountRef.current < MAX_RETRIES) {
         const next = retryCountRef.current + 1;
@@ -583,25 +666,30 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       return;
     }
 
+    // Generic fallback error presentation
     setListening(false);
     setOperationModalTitle("Speech error");
     setOperationModalMsg(String(message));
     setOperationModalVisible(true);
   });
 
-  // NOTE: Changed — do NOT auto-start when the modal opens.
-  // The user must press Start.
+  /**
+   * NOTE: Changed — do NOT auto-start when the modal opens.
+   * The user must press Start. This avoids the recognizer immediately starting and potentially
+   * missing earlier speech due to OS overwriting or other focus issues.
+   */
   useEffect(() => {
     if (voiceModalVisible) {
       setRetryCount(0);
-      // Intentionally do NOT auto-start listening here. User will tap Start button.
+      // Do not auto-start; user must tap Start.
       return;
     } else {
       try {
         ExpoSpeechRecognitionModule.stop();
       } catch (e) {
-        // ignore
+        // ignore stop errors
       }
+      // clear transient state
       setListening(false);
       setInterimText("");
       interimTextRef.current = "";
@@ -612,6 +700,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceModalVisible]);
 
+  // Public API returned to screens/components
   return {
     fabOptionsVisible,
     setFabOptionsVisible,

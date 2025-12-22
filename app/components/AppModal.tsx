@@ -1,4 +1,5 @@
 // app/components/AppModal.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import {
@@ -30,6 +31,13 @@ export interface AppModalProps {
   containerStyle?: StyleProp<ViewStyle>;
 }
 
+/**
+ * AppModal - small reusable modal component for success/error/info/confirm dialogs.
+ *
+ * - Animates scale + opacity when shown.
+ * - Uses theme tokens from ThemeProvider for consistent colors.
+ * - Exposes confirm/cancel handlers for confirm dialogs, and a single continue button for other types.
+ */
 export default function AppModal({
   visible,
   type = "info",
@@ -45,9 +53,11 @@ export default function AppModal({
 }: AppModalProps) {
   const { resolved } = useTheme();
 
+  // Animated values (scale + opacity) for entrance/exit
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
+  // Run entrance animation when visible becomes true, reset when hidden.
   useEffect(() => {
     if (visible) {
       Animated.parallel([
@@ -63,15 +73,18 @@ export default function AppModal({
         }),
       ]).start();
     } else {
+      // reset values when modal hidden to allow re-run on next open
       scaleAnim.setValue(0.8);
       opacityAnim.setValue(0);
     }
   }, [visible, scaleAnim, opacityAnim]);
 
+  // Derived booleans for convenience
   const isSuccess = type === "success";
   const isError = type === "error";
   const isConfirm = type === "confirm";
 
+  // Fallbacks when title/message are not supplied
   const defaultTitle = title
     ? title
     : isSuccess
@@ -92,6 +105,7 @@ export default function AppModal({
           ? "Are you sure you want to continue?"
           : "Something to note.";
 
+  // Icon picks per modal type
   const iconName = isSuccess
     ? "checkmark"
     : isError
@@ -100,6 +114,7 @@ export default function AppModal({
         ? "alert-circle"
         : "information-circle";
 
+  // Theme-aware colors
   const bgSurface =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
   const textPrimary =
@@ -111,6 +126,7 @@ export default function AppModal({
   const primaryBg =
     resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
 
+  // Icon color variations for each modal type
   const iconColor =
     resolved === "dark"
       ? isSuccess
@@ -124,6 +140,7 @@ export default function AppModal({
           ? colors.brand.error
           : colors.brand.primaryLight;
 
+  // circleBg is used to give a soft colored circle behind the icon
   const circleBg = isSuccess
     ? resolved === "dark"
       ? colors.brandDark.successLight
@@ -162,6 +179,7 @@ export default function AppModal({
           </Text>
 
           {isConfirm ? (
+            // Confirm modal layout: two buttons (Cancel / Confirm)
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 onPress={onCancel}
@@ -198,6 +216,7 @@ export default function AppModal({
               </TouchableOpacity>
             </View>
           ) : (
+            // Informational modal layout: single continue/close button
             <TouchableOpacity
               onPress={onClose}
               style={[styles.singleBtn, { backgroundColor: primaryBg }]}
@@ -226,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     alignItems: "center",
-    // shadow
+    // shadow for depth (Android + iOS)
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,

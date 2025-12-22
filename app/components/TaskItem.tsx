@@ -1,4 +1,5 @@
 // app/components/TaskItem.tsx
+
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -21,11 +22,26 @@ export interface TaskItemProps {
   onEdit: () => void;
 }
 
+/**
+ * TaskItem - visual representation of a single task in the list.
+ *
+ * Responsibilities:
+ * - Render title, optional description and due date.
+ * - Show completion state and allow toggling it by pressing the item.
+ * - Provide edit and delete affordances.
+ * - Confirm deletion with AppModal.
+ *
+ * Notes:
+ * - Uses Animated spring on press for subtle tactile feedback.
+ * - Colors adapt to theme tokens for consistent styling.
+ */
 export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
+  // scaleValue used to animate the entire item when the user presses it
   const scaleValue = useRef(new Animated.Value(1)).current;
   const [confirmVisible, setConfirmVisible] = useState(false);
   const { resolved } = useTheme();
 
+  // Press in: slightly shrink the card
   const handlePressIn = () => {
     Animated.spring(scaleValue, {
       toValue: 0.98,
@@ -33,12 +49,15 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     }).start();
   };
 
+  // Press out: restore scale
   const handlePressOut = () => {
     Animated.spring(scaleValue, { toValue: 1, useNativeDriver: true }).start();
   };
 
+  // Toggle complete state when user taps the main card area
   const handleToggle = (_e?: GestureResponderEvent) => onToggle(task.id);
 
+  // Confirm deletion modal controls
   const openConfirm = () => setConfirmVisible(true);
   const closeConfirm = () => setConfirmVisible(false);
   const handleConfirmDelete = () => {
@@ -46,23 +65,25 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
     closeConfirm();
   };
 
+  // Utility: format a timestamp to local date string (used for due date)
   const formatDue = (ts?: number) => {
     if (!ts) return null;
     return new Date(ts).toLocaleDateString();
   };
 
+  // Compute whether the task is overdue
   const overdue =
     typeof task.dueDate === "number" &&
     task.dueDate < Date.now() &&
     !task.completed;
 
-  // colors derived from tokens
+  // Colors for action icons (theme-aware)
   const editColor =
     resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
   const trashColor =
     resolved === "dark" ? colors.brandDark.error : colors.brand.error;
 
-  // container background and border-left color
+  // Card background and left border color adapt to completion + theme
   const containerBg = task.completed
     ? resolved === "dark"
       ? colors.brandDark.surface
@@ -79,7 +100,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
       ? colors.brandDark.primary
       : colors.brand.primary;
 
-  // inner text colors
+  // Text color choices depend on completion + theme
   const titleColor = task.completed
     ? resolved === "dark"
       ? colors.brandDark.textMuted
@@ -124,6 +145,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
           ]}
         >
           <View className="flex-1 flex-row items-center">
+            {/* Checkbox / status indicator */}
             <Animated.View
               className="w-5 h-5 rounded-full mr-3 items-center justify-center"
               style={{
@@ -142,12 +164,14 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                     : colors.brand.primary,
               }}
             >
+              {/* show check when completed */}
               {task.completed && (
                 <MaterialIcons name="check" size={14} color="white" />
               )}
             </Animated.View>
 
             <View className="flex-1">
+              {/* Title - allow two lines */}
               <Text
                 style={[styles.title, { color: titleColor }]}
                 numberOfLines={2}
@@ -155,6 +179,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                 {task.title}
               </Text>
 
+              {/* Optional description */}
               {task.description && (
                 <Text
                   style={[styles.desc, { color: descColor }]}
@@ -164,6 +189,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
                 </Text>
               )}
 
+              {/* Optional due date */}
               {typeof task.dueDate === "number" && (
                 <Text style={[styles.due, { color: dueColor }]}>
                   Due: {formatDue(task.dueDate)} {overdue ? " • overdue" : ""}
@@ -172,6 +198,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
             </View>
           </View>
 
+          {/* Action buttons: Edit, Delete */}
           <View className="flex-row items-center gap-2 ml-3">
             <Pressable
               onPress={onEdit}
@@ -191,6 +218,7 @@ export function TaskItem({ task, onDelete, onToggle, onEdit }: TaskItemProps) {
         </Pressable>
       </Animated.View>
 
+      {/* Confirmation dialog for delete */}
       <AppModal
         visible={confirmVisible}
         type="confirm"

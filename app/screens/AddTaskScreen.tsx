@@ -1,4 +1,5 @@
 // app/screens/AddTaskScreen.tsx
+
 "use client";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -22,18 +23,37 @@ import colors from "../utils/themes/colors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddTask">;
 
+/**
+ * AddTaskScreen
+ *
+ * Responsibilities:
+ * - Create new tasks or edit an existing task (route.params.taskToEdit).
+ * - Save tasks to local storage via saveTasks and navigate back.
+ * - Provide UI for title, description, optional due date, and basic validation.
+ *
+ * UX notes:
+ * - Uses KeyboardAvoidingView to ensure inputs are accessible when the keyboard is open.
+ * - Shows a small modal for validation and error feedback (using AppModal).
+ * - Uses fade animation on mount to make entry feel polished.
+ */
 export function AddTaskScreen({ navigation, route }: Props) {
   const taskToEdit = route.params?.taskToEdit;
+
+  // form state
   const [title, setTitle] = useState(taskToEdit?.title || "");
   const [description, setDescription] = useState(taskToEdit?.description || "");
   const [loading, setLoading] = useState(false);
+
+  // fade animation on mount
   const fadeValue = useRef(new Animated.Value(0)).current;
 
+  // optional due date stored as timestamp (ms)
   const [dueDate, setDueDate] = useState<number | undefined>(
     taskToEdit?.dueDate
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // modal used for feedback (success / error)
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<"success" | "error" | "info">(
     "info"
@@ -45,6 +65,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
 
   const { resolved } = useTheme();
 
+  // run mount animation and set header title (Add vs Edit)
   useEffect(() => {
     Animated.timing(fadeValue, {
       toValue: 1,
@@ -56,6 +77,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
     });
   }, [taskToEdit, navigation, fadeValue]);
 
+  // small helper to show the in-app modal
   const showModal = (
     type: "success" | "error" | "info",
     title?: string,
@@ -67,6 +89,14 @@ export function AddTaskScreen({ navigation, route }: Props) {
     setModalVisible(true);
   };
 
+  /**
+   * handleSaveTask - validate and persist the task.
+   *
+   * Behavior:
+   * - If editing, update the existing task in storage.
+   * - If creating, prepend the new task to the saved list (newest-first).
+   * - On success, navigate back.
+   */
   const handleSaveTask = useCallback(async () => {
     if (title.trim().length === 0) {
       showModal("error", "Required Field", "Please enter a task title");
@@ -79,6 +109,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
       let tasks: Task[] = stored ? stored : [];
 
       if (taskToEdit) {
+        // update existing
         tasks = tasks.map((t) =>
           t.id === taskToEdit.id
             ? {
@@ -90,6 +121,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
             : t
         );
       } else {
+        // create new
         const now = Date.now();
         const newTask: Task = {
           id: now.toString(),
@@ -112,6 +144,7 @@ export function AddTaskScreen({ navigation, route }: Props) {
     }
   }, [title, description, taskToEdit, navigation, dueDate]);
 
+  // Date picker change handler (platform differences handled)
   const onChangeDate = (_: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === "ios");
     if (selectedDate) {
@@ -122,9 +155,11 @@ export function AddTaskScreen({ navigation, route }: Props) {
   const clearDueDate = () => setDueDate(undefined);
   const formatDate = (ts?: number) =>
     ts ? new Date(ts).toLocaleDateString() : "No due date";
+
   const iconColor =
     resolved === "dark" ? colors.brandDark.primary : colors.brand.primary;
 
+  // theme-aware colors used in render
   const rootBg = resolved === "dark" ? colors.brand.black : colors.brand.white;
   const surfaceBg =
     resolved === "dark" ? colors.brandDark.surface : colors.brand.white;
