@@ -17,7 +17,6 @@ export type UseVoiceReturn = {
   finalText: string;
   retryCount: number;
   MAX_RETRIES: number;
-  debugLogs: string[];
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
   operationModalVisible: boolean;
@@ -59,17 +58,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     string | undefined
   >(undefined);
 
-  // debug logs
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const addDebugLog = useCallback((msg: string) => {
-    const ts = new Date().toLocaleTimeString();
-    setDebugLogs((prev) => {
-      const next = [`${ts} ${msg}`, ...prev].slice(0, 80);
-      return next;
-    });
-    console.debug(msg);
-  }, []);
-
   // retry counter
   const [retryCount, setRetryCount] = useState(0);
   const retryCountRef = useRef<number>(retryCount);
@@ -82,21 +70,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
 
   // guard so we only process stopListening once per modal open
   const processingRef = useRef(false);
-
-  const dumpEvent = useCallback((ev: any) => {
-    try {
-      return JSON.stringify(
-        ev,
-        (_, v) => {
-          if (typeof v === "bigint") return String(v);
-          return v;
-        },
-        2
-      );
-    } catch {
-      return String(ev);
-    }
-  }, []);
 
   const chooseBestAlternative = useCallback((alternatives: any[]) => {
     if (!Array.isArray(alternatives) || alternatives.length === 0)
@@ -133,7 +106,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
   }, []);
 
   // Modified extractor: prefer the single highest-confidence alternative across the event.
-  // Replace your existing extractTranscriptFromEvent with this version:
   const extractTranscriptFromEvent = useCallback(
     (ev: any): string | undefined => {
       if (!ev) return undefined;
@@ -168,7 +140,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
             continue;
           }
 
-          // If the result has transcript + confidence at the result level.
+          // If the result has transcript + confidence at the result level,
           // treat that as a single alternative with a numeric confidence.
           if (typeof r.transcript === "string" && r.transcript.trim()) {
             const txt = r.transcript.trim();
@@ -317,13 +289,11 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       if (watchdogRef.current) {
         clearTimeout(watchdogRef.current);
       }
-      addDebugLog(`[watchdog] starting for ${timeoutMs}ms`);
       watchdogRef.current = setTimeout(() => {
-        addDebugLog("[watchdog] triggered - stopping listening due to timeout");
         try {
           ExpoSpeechRecognitionModule.stop();
         } catch (e) {
-          addDebugLog(`[watchdog stop error] ${String(e)}`);
+          // ignore
         }
         setListening(false);
 
@@ -331,15 +301,11 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
           if (retryCountRef.current < MAX_RETRIES) {
             const next = retryCountRef.current + 1;
             setRetryCount(next);
-            addDebugLog(
-              `[watchdog retry] attempting restart ${next}/${MAX_RETRIES}`
-            );
             setTimeout(() => {
               if (!voiceModalVisibleRef.current) return;
               if (startListeningRef.current) startListeningRef.current();
             }, 400);
           } else {
-            addDebugLog("[watchdog] exceeded retries, showing message");
             setOperationModalTitle("No speech detected");
             setOperationModalMsg(
               "No speech was captured. Try again with a quieter environment or check microphone permissions."
@@ -350,22 +316,19 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         watchdogRef.current = null;
       }, timeoutMs) as unknown as number;
     },
-    [addDebugLog, MAX_RETRIES]
+    [MAX_RETRIES]
   );
 
   // start listening (permissions + start)
   const startListening = useCallback(async () => {
-    addDebugLog("[action] startListening invoked");
     try {
       const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      addDebugLog(`[permission result] ${dumpEvent(perm)}`);
       if (!perm?.granted) {
         setOperationModalTitle("Permission denied");
         setOperationModalMsg(
           "Please allow microphone / speech permissions in settings."
         );
         setOperationModalVisible(true);
-        addDebugLog("[permission] not granted");
         return;
       }
 
@@ -383,17 +346,15 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         continuous: true,
       });
 
-      addDebugLog("[speech] started");
       startWatchdog(18000);
     } catch (err) {
-      addDebugLog(`[startListening error] ${String(err)}`);
       console.error("[speech] startListening error", err);
       setOperationModalTitle("Error");
       setOperationModalMsg("Failed to start speech recognition.");
       setOperationModalVisible(true);
       setListening(false);
     }
-  }, [addDebugLog, dumpEvent, startWatchdog]);
+  }, [startWatchdog]);
 
   // publish to ref so watchdog can call it even though it's declared later
   useEffect(() => {
@@ -402,11 +363,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
 
   // stop listening and process finalText -> batch save
   const stopListening = useCallback(async () => {
-    addDebugLog("[action] stopListening invoked");
     if (processingRef.current) {
-      addDebugLog(
-        "[stopListening] already processing, ignoring duplicate call"
-      );
       return;
     }
     processingRef.current = true;
@@ -414,9 +371,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     try {
       try {
         await ExpoSpeechRecognitionModule.stop();
-        addDebugLog("[speech] stop() called");
       } catch (err) {
-        addDebugLog(`[stop error] ${String(err)}`);
         console.warn("[speech] stop error", err);
       }
 
@@ -428,7 +383,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         interimTextRef.current ||
         ""
       ).trim();
-      addDebugLog(`[collected transcript (pre-normalize)] "${transcript}"`);
 
       // reset UI buffers
       setInterimText("");
@@ -439,7 +393,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       if (watchdogRef.current) {
         clearTimeout(watchdogRef.current);
         watchdogRef.current = null;
-        addDebugLog("[watchdog] cleared on stop");
       }
 
       setVoiceModalVisible(false);
@@ -454,12 +407,8 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       }
 
       const normalized = normalizeTranscript(transcript);
-      addDebugLog(`[collected transcript (normalized)] "${normalized}"`);
 
       let titlesRaw = parseTranscriptionToTasks(normalized);
-      addDebugLog(
-        `[parseTranscriptionToTasks] returned ${titlesRaw.length} part(s)`
-      );
 
       // Determine if user actually used splitters (commas, 'and', 'then', 'or', '&')
       const hadSplitter = /,|;|\band\b|\bthen\b|\bor\b|&/i.test(normalized);
@@ -467,9 +416,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       // If parser returned multiple parts but there was NO splitter token in the normalized transcript,
       // this likely means the recognizer returned multiple variant sentences — collapse to ONE.
       if (titlesRaw.length > 1 && !hadSplitter) {
-        addDebugLog(
-          "[collapse] multiple parts found but no splitter token - collapsing to single best part"
-        );
         // pick the longest part (most complete) as representative
         let longest = titlesRaw[0];
         for (const t of titlesRaw) {
@@ -505,9 +451,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
 
       // If there are still multiple finalCandidates but there was no splitter, collapse again to 1:
       if (finalCandidates.length > 1 && !hadSplitter) {
-        addDebugLog(
-          "[collapse-after-dedupe] still multiple candidates without splitter => collapse to single longest"
-        );
         let longest = finalCandidates[0];
         for (const t of finalCandidates)
           if (t.length > longest.length) longest = t;
@@ -535,16 +478,13 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         }));
         const updated = [...newTasks, ...stored];
         await saveTasks(updated);
-        addDebugLog(`[batch save] saved ${newTasks.length} task(s)`);
         await onRefresh();
         setOperationModalTitle("Added tasks");
         setOperationModalMsg(
           `Added ${newTasks.length} task${newTasks.length > 1 ? "s" : ""}.`
         );
         setOperationModalVisible(true);
-        addDebugLog(`[tasks added] ${newTasks.length}`);
       } catch (err) {
-        addDebugLog(`[adding tasks error] ${String(err)}`);
         console.error("[speech] adding tasks error", err);
         setOperationModalTitle("Error");
         setOperationModalMsg("Failed to save tasks.");
@@ -553,20 +493,12 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     } finally {
       processingRef.current = false;
     }
-  }, [
-    normalizeTranscript,
-    parseTranscriptionToTasks,
-    onRefresh,
-    addDebugLog,
-    areSimilar,
-  ]);
+  }, [normalizeTranscript, parseTranscriptionToTasks, onRefresh, areSimilar]);
 
   // event handlers using expo hooks
-  useSpeechRecognitionEvent("interim", (event) => {
-    addDebugLog(`[event interim] ${dumpEvent(event)}`);
+  useSpeechRecognitionEvent("interim" as any, (event: any) => {
     const t = extractTranscriptFromEvent(event);
     if (t) {
-      addDebugLog(`[interim extracted] "${t}"`);
       setInterimText(t);
       interimTextRef.current = t;
     } else {
@@ -575,35 +507,27 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
   });
 
-  useSpeechRecognitionEvent("result", (event) => {
-    addDebugLog(`[event result] ${dumpEvent(event)}`);
+  useSpeechRecognitionEvent("result" as any, (event: any) => {
     const t = extractTranscriptFromEvent(event);
     if (t) {
-      addDebugLog(`[result extracted] "${t}"`);
       const normalized = normalizeTranscript(t);
-      addDebugLog(`[result normalized] "${normalized}"`);
       setFinalText(normalized);
       finalTextRef.current = normalized;
     } else if (typeof event.transcript === "string") {
       const t2 = event.transcript.trim();
       const normalized = normalizeTranscript(t2);
-      addDebugLog(`[result fallback normalized] "${normalized}"`);
       setFinalText(normalized);
       finalTextRef.current = normalized;
-    } else {
-      addDebugLog("[result] no transcript found in event");
     }
     setInterimText("");
     interimTextRef.current = "";
     if (watchdogRef.current) {
       clearTimeout(watchdogRef.current);
       watchdogRef.current = null;
-      addDebugLog("[watchdog] cleared after result");
     }
   });
 
-  useSpeechRecognitionEvent("error", (ev) => {
-    addDebugLog(`[event error] ${dumpEvent(ev)}`);
+  useSpeechRecognitionEvent("error" as any, (ev: any) => {
     console.warn("[speech error]", ev);
 
     const code =
@@ -629,11 +553,10 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
       if (retryCountRef.current < MAX_RETRIES) {
         const next = retryCountRef.current + 1;
         setRetryCount(next);
-        addDebugLog(`[retry] no-speech -> retrying ${next}/${MAX_RETRIES}`);
         try {
           ExpoSpeechRecognitionModule.stop();
         } catch (e) {
-          addDebugLog(`[stop during retry] ${String(e)}`);
+          // ignore
         }
         setTimeout(() => {
           if (!voiceModalVisibleRef.current) return;
@@ -641,7 +564,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
         }, 400);
         return;
       }
-      addDebugLog("[retry] exceeded max retries for no-speech");
       setOperationModalTitle("No speech detected");
       setOperationModalMsg(
         "We couldn't detect speech after several attempts. Make sure microphone is enabled and try again."
@@ -652,7 +574,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     }
 
     if (isNetwork) {
-      addDebugLog(`[network error] ${message}`);
       setListening(false);
       setOperationModalTitle("Network error");
       setOperationModalMsg(
@@ -673,15 +594,13 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
   useEffect(() => {
     if (voiceModalVisible) {
       setRetryCount(0);
-      addDebugLog("[voice modal] opened (waiting for user to press Start)");
       // Intentionally do NOT auto-start listening here. User will tap Start button.
       return;
     } else {
       try {
         ExpoSpeechRecognitionModule.stop();
-        addDebugLog("[voice modal] closed - stopped recognizer");
       } catch (e) {
-        addDebugLog(`[stop on close] ${String(e)}`);
+        // ignore
       }
       setListening(false);
       setInterimText("");
@@ -703,7 +622,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     finalText,
     retryCount,
     MAX_RETRIES,
-    debugLogs,
     startListening,
     stopListening,
     operationModalVisible,
