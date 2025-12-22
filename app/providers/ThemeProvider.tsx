@@ -23,7 +23,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const system = useColorScheme(); // 'light' | 'dark' | null
+  const system = useColorScheme();
   const [mode, setModeInternal] = useState<ThemeMode>("system");
 
   const resolved: "light" | "dark" =
@@ -63,13 +63,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [mode, resolved]
   );
 
-  // Root view: apply explicit backgroundColor for reliability AND apply `dark` class
-  // so nativewind `dark:` variants still work for children.
-  // NOTE: we intentionally use both a style backgroundColor (guaranteed) and className (nativewind)
   return (
     <ThemeContext.Provider value={value}>
       <View
-        // nativewind class for `dark:` variants; keep flex-1 for layout
         className={resolved === "dark" ? "dark flex-1" : "flex-1"}
         // explicit background ensures whole app is black in dark mode immediately
         style={{
@@ -83,26 +79,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     </ThemeContext.Provider>
   );
 }
-
-const styles = StyleSheet.create({
-  badgeContainer: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    zIndex: 1000,
-  },
-  badge: {
-    backgroundColor: "transparent",
-    fontSize: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    fontFamily: "Jakarta",
-    // slight text shadow for readability
-    textShadowColor: "rgba(0,0,0,0.2)",
-    textShadowRadius: 1,
-  },
-});
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);

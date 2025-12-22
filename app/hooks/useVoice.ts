@@ -168,7 +168,7 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
             continue;
           }
 
-          // NEW: If the result has transcript + confidence at the result level (your logs show this),
+          // If the result has transcript + confidence at the result level.
           // treat that as a single alternative with a numeric confidence.
           if (typeof r.transcript === "string" && r.transcript.trim()) {
             const txt = r.transcript.trim();
@@ -309,7 +309,6 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     return denom > 0 && common / denom >= 0.6; // 60% overlap => similar
   }, []);
 
-  // ---- startListening ref indirection to avoid TS ordering issues ----
   const startListeningRef = useRef<(() => Promise<void>) | null>(null);
 
   // startWatchdog uses startListeningRef.current() when restarting
@@ -669,16 +668,14 @@ export function useVoice(onRefresh: () => Promise<any> | void): UseVoiceReturn {
     setOperationModalVisible(true);
   });
 
-  // auto-start when voice modal opens; ensure we don't double-start
+  // NOTE: Changed — do NOT auto-start when the modal opens.
+  // The user must press Start.
   useEffect(() => {
     if (voiceModalVisible) {
       setRetryCount(0);
-      addDebugLog("[voice modal] opened - will auto-start listening shortly");
-      const t = setTimeout(() => {
-        if (!listening && startListeningRef.current)
-          startListeningRef.current();
-      }, 150);
-      return () => clearTimeout(t);
+      addDebugLog("[voice modal] opened (waiting for user to press Start)");
+      // Intentionally do NOT auto-start listening here. User will tap Start button.
+      return;
     } else {
       try {
         ExpoSpeechRecognitionModule.stop();

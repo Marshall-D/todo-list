@@ -1,4 +1,5 @@
 // app/screens/TaskListScreen.tsx
+
 "use client";
 import React, { useCallback, useRef, useEffect } from "react";
 import {
@@ -10,9 +11,7 @@ import {
   RefreshControl,
   Modal,
   Animated,
-  ScrollView,
   TextInput,
-  StyleSheet,
 } from "react-native";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -417,7 +416,11 @@ function TaskListView({
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
-          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            paddingBottom: 70,
+          }}
           scrollIndicatorInsets={{ right: 1 }}
         />
       )}
@@ -536,7 +539,7 @@ function TaskListView({
         </Pressable>
       </Modal>
 
-      {/* Voice Modal */}
+      {/* Voice Modal (simplified: only title + subtitle visible) */}
       <Modal
         visible={voice.voiceModalVisible}
         transparent
@@ -581,7 +584,7 @@ function TaskListView({
               style={{
                 fontSize: 14,
                 color: textMuted,
-                marginBottom: 12,
+                marginBottom: 20,
                 textAlign: "center",
               }}
             >
@@ -589,103 +592,7 @@ function TaskListView({
               say.
             </Text>
 
-            <View
-              style={{ width: "100%", marginBottom: 12, alignItems: "center" }}
-            >
-              <Text
-                style={{
-                  fontFamily: "Jakarta",
-                  fontSize: 12,
-                  color: textMuted,
-                  marginBottom: 6,
-                }}
-              >
-                Interim
-              </Text>
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontSize: 16,
-                  color: textPrimary,
-                }}
-              >
-                {voice.interimText ||
-                  (voice.listening ? "Listening..." : "Tap Start")}
-              </Text>
-            </View>
-
-            <View
-              style={{ width: "100%", marginBottom: 12, alignItems: "center" }}
-            >
-              <Text
-                style={{
-                  fontFamily: "Jakarta",
-                  fontSize: 12,
-                  color: textMuted,
-                  marginBottom: 6,
-                }}
-              >
-                Final
-              </Text>
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontSize: 16,
-                  color: textPrimary,
-                }}
-              >
-                {voice.finalText || "-"}
-              </Text>
-            </View>
-
-            {/* Debug area */}
-            <View
-              style={{ width: "100%", marginBottom: 16, alignItems: "center" }}
-            >
-              <Text style={{ fontSize: 12, color: textMuted, marginBottom: 6 }}>
-                Retries: {voice.retryCount}/{voice.MAX_RETRIES}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: colors.brand.placeholder,
-                  marginBottom: 8,
-                }}
-              >
-                {voice.listening ? "Listening — speak now" : "Not listening"}
-              </Text>
-
-              <View
-                style={{
-                  width: "100%",
-                  borderWidth: 2,
-                  borderColor,
-                  borderRadius: 12,
-                  padding: 8,
-                  backgroundColor:
-                    resolved === "dark"
-                      ? colors.brandDark.surface
-                      : colors.brand.white,
-                }}
-              >
-                <ScrollView style={{ maxHeight: 120 }}>
-                  {voice.debugLogs.length === 0 ? (
-                    <Text
-                      style={{ fontSize: 12, color: colors.brand.placeholder }}
-                    >
-                      No logs yet
-                    </Text>
-                  ) : (
-                    voice.debugLogs.slice(0, 12).map((l, i) => (
-                      <Text key={i} style={{ fontSize: 12, color: textMuted }}>
-                        {l}
-                      </Text>
-                    ))
-                  )}
-                </ScrollView>
-              </View>
-            </View>
-
+            {/* Controls: Start / Stop / Cancel */}
             <View style={{ width: "100%", flexDirection: "row", gap: 12 }}>
               {!voice.listening ? (
                 <Pressable
